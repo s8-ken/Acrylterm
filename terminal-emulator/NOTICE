@@ -1,0 +1,8 @@
+This module contains source code from Termux (https://github.com/termux/termux-app):
+  - terminal-emulator/src/main/java/com/termux/terminal/*
+  - terminal-view/src/main/java/com/termux/view/TerminalRenderer.java
+Upstream commit: see UPSTREAM_COMMIT.
+
+Per the upstream LICENSE.md, the terminal-emulator and terminal-view libraries are based on
+"Terminal Emulator for Android" (https://github.com/jackpal/Android-Terminal-Emulator) and are
+released under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0

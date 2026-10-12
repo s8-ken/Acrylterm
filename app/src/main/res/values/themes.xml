@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.AndroidTerminal" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/term_bg</item>
+        <item name="android:statusBarColor">#FF101216</item>
+        <item name="android:navigationBarColor">#FF101216</item>
+    </style>
+</resources>

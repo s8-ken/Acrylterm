@@ -1,0 +1,7 @@
+-keep class net.schmizz.** { *; }
+-keep class com.hierynomus.** { *; }
+-keep class org.bouncycastle.** { *; }
+-keep class tsbridge.** { *; }
+-keep class go.** { *; }
+-dontwarn org.slf4j.**
+-dontwarn javax.naming.**

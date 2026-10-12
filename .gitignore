@@ -1,0 +1,11 @@
+.gradle/
+build/
+/local.properties
+.idea/
+*.iml
+.DS_Store
+.kotlin/
+captures/
+# gomobile output (rebuild with tsbridge/build.sh)
+app/libs/*.aar
+app/libs/*.jar

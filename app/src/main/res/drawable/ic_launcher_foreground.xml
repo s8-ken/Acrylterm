@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A prompt chevron and cursor inside a split-pane frame (herdr). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF7EE787"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M34,40 L46,52 L34,64" />
+    <path
+        android:fillColor="#FFE6EDF3"
+        android:pathData="M52,61 L72,61 L72,66 L52,66 Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF58A6FF"
+        android:strokeWidth="2.5"
+        android:pathData="M28,30 L80,30 L80,78 L28,78 Z M62,30 L62,50 M62,50 L80,50" />
+</vector>
