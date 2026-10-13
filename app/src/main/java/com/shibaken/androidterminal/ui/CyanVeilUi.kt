@@ -19,6 +19,9 @@ import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import com.shibaken.androidterminal.R
 import com.shibaken.androidterminal.data.AppearanceSettings
 
 val LocalAppearance = staticCompositionLocalOf { AppearanceSettings() }
@@ -81,5 +84,20 @@ fun SectionHeading(title: String, detail: String, modifier: Modifier = Modifier)
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+fun VeilPageHeader(title: String, onBack: () -> Unit, subtitle: String? = null,
+    actions: @Composable RowScope.() -> Unit = {}) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        VeilIconButton(R.drawable.veil_back, "戻る", onBack)
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 23.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (subtitle != null) Text(subtitle, color = CyanVeil.Muted, fontSize = 11.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        actions()
     }
 }

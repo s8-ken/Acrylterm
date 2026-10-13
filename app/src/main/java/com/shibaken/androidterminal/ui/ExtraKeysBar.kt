@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shibaken.androidterminal.terminal.TerminalCanvasView
@@ -62,7 +63,7 @@ fun ExtraKeysBar(
         // Pinned: always reachable even when the key row is scrolled.
         Key("⌨", desc = "キーボードの表示/非表示", onTap = onKeyboard)
         Row(
-            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+            Modifier.weight(1f).horizontalScroll(rememberScrollState()).semantics { contentDescription = "補助キー" },
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -71,6 +72,7 @@ fun ExtraKeysBar(
             Key("CTRL", active = ctrlOn, onTap = onCtrl)
             Key("ALT", active = altOn, onTap = onAlt)
             if (showPrefixKey) Key("^B", accent = true, desc = "プレフィックス Ctrl+B") { view.session?.sendText("\u0002") }
+            extKeys.forEachIndexed { i, label -> Key(label, accent = true, desc = "拡張キー: $label") { onExtKey(i) } }
             RepeatKey("←", "左矢印") { view.sendKey(KeyEvent.KEYCODE_DPAD_LEFT) }
             RepeatKey("↓", "下矢印") { view.sendKey(KeyEvent.KEYCODE_DPAD_DOWN) }
             RepeatKey("↑", "上矢印") { view.sendKey(KeyEvent.KEYCODE_DPAD_UP) }
@@ -83,7 +85,6 @@ fun ExtraKeysBar(
             Key("END") { view.sendKey(KeyEvent.KEYCODE_MOVE_END) }
             Key("PGUP") { view.sendKey(KeyEvent.KEYCODE_PAGE_UP) }
             Key("PGDN") { view.sendKey(KeyEvent.KEYCODE_PAGE_DOWN) }
-            extKeys.forEachIndexed { i, label -> Key(label, accent = true) { onExtKey(i) } }
         }
     }
     }
@@ -105,7 +106,7 @@ private fun KeyBox(label: String, desc: String?, active: Boolean, accent: Boolea
         modifier
             .semantics { desc?.let { contentDescription = it } }
             .height(48.dp)
-            .widthIn(min = 48.dp)
+            .widthIn(min = 48.dp, max = 180.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(bg)
             .border(
@@ -117,7 +118,8 @@ private fun KeyBox(label: String, desc: String?, active: Boolean, accent: Boolea
         contentAlignment = Alignment.Center,
     ) {
         if (label == "⌨") VeilIcon(R.drawable.veil_keyboard, null, CyanVeil.Cyan)
-        else Text(label, color = fg, fontFamily = FontFamily.Monospace, fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
+        else Text(label, color = fg, fontFamily = FontFamily.Monospace, fontSize = 12.sp,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
     }
 }
 

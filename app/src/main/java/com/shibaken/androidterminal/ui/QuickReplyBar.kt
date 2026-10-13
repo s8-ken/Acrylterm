@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +36,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.shibaken.androidterminal.ext.ExtEngine
 import com.shibaken.androidterminal.herdr.HerdrController
@@ -53,7 +55,8 @@ val QuickReplyBarHeight = 88.dp
 @Composable
 fun QuickReplyBar(paneId: String, terminal: PaneTerminal?, herdr: HerdrController, ext: ExtEngine?, onCompose: () -> Unit, modifier: Modifier = Modifier) {
     var choices by remember(paneId) { mutableStateOf(QuickReplies.fallback()) }
-    LaunchedEffect(paneId, terminal) {
+    val registry = ext?.registry?.collectAsState()?.value
+    LaunchedEffect(paneId, terminal, ext, registry) {
         suspend fun refresh() {
             try {
                 val text = herdr.readPane(paneId, 15)
@@ -88,7 +91,8 @@ fun QuickReplyBar(paneId: String, terminal: PaneTerminal?, herdr: HerdrControlle
                 when (c.kind) {
                     QuickChoice.Kind.ENTER -> Icon(Icons.AutoMirrored.Filled.KeyboardReturn, null, tint = chipFg())
                     QuickChoice.Kind.ESC -> Icon(Icons.Filled.Close, null, tint = chipFg())
-                    QuickChoice.Kind.OPTION -> Text(c.label, color = chipFg(), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                    QuickChoice.Kind.OPTION -> Text(c.label, color = chipFg(), fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -105,7 +109,7 @@ private fun Chip(description: String, onClick: () -> Unit, content: @Composable 
     Box(
         Modifier
             .height(48.dp)
-            .widthIn(min = 48.dp)
+            .widthIn(min = 48.dp, max = 240.dp)
             .clip(CircleShape)
             .background(CyanVeil.Cyan)
             .clickable(onClick = onClick)

@@ -367,18 +367,9 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     }
 
     if (showExtCommands && extRt != null) {
-        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { showExtCommands = false }) {
-            Column(Modifier.padding(bottom = 24.dp)) {
-                extRegistry?.commands?.forEach { c ->
-                    Text(
-                        c.name,
-                        Modifier.fillMaxWidth().clickable { extRt?.engine?.runCommand(c.name); showExtCommands = false }
-                            .padding(horizontal = 20.dp, vertical = 14.dp),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                }
-            }
-        }
+        ExtensionCommandsSheet(commands = extRegistry?.commands.orEmpty(),
+            onRun = { name -> extRt?.engine?.runCommand(name); showExtCommands = false },
+            onDismiss = { showExtCommands = false })
     }
 
     if (showComposer && herdr != null) {

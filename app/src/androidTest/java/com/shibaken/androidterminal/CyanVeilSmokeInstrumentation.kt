@@ -33,7 +33,7 @@ class CyanVeilSmokeInstrumentation : Instrumentation() {
             }
             if (captureUi) CyanVeilUiCapture(this).verifyAndCapture()
             result.putString("stream", "PASS: appearance persistence and bounds; terminal background transparency; opaque text, ANSI fills and cursor." +
-                if (captureUi) " UI navigation, close confirmation/cancel, keyboard toggle and screenshots verified.\n" else "\n")
+                if (captureUi) " UI navigation, scripts create/save/cancel/delete, Lua command/key execution, host extension settings, keyboard and screenshots verified.\n" else "\n")
             finish(Activity.RESULT_OK, result)
         } catch (error: Throwable) {
             result.putString("stream", "FAIL: ${error.stackTraceToString()}\n")
