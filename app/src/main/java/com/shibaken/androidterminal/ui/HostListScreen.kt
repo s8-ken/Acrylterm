@@ -1,60 +1,29 @@
 package com.shibaken.androidterminal.ui
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Lan
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.background
+import androidx.compose.ui.unit.sp
 import com.shibaken.androidterminal.App
+import com.shibaken.androidterminal.R
 import com.shibaken.androidterminal.data.HostProfile
 import com.shibaken.androidterminal.session.ConnState
 import com.shibaken.androidterminal.session.SshTerminalSession
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HostListScreen(
     onConnect: (HostProfile) -> Unit,
@@ -62,134 +31,121 @@ fun HostListScreen(
     onEdit: (String?) -> Unit,
     onKeys: () -> Unit,
     onTailscale: () -> Unit,
+    onAppearance: () -> Unit,
     onExtScripts: () -> Unit,
 ) {
     val app = LocalContext.current.applicationContext as App
     val hosts by app.hosts.hosts.collectAsState()
     val sessions by app.sessions.sessions.collectAsState()
     val ts by app.tailscale.status.collectAsState()
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("androidTerminal") },
-                actions = {
-                    IconButton(onClick = onTailscale) {
-                        Box {
-                            Icon(Icons.Filled.Lan, contentDescription = "Tailscale")
-                            val dot = when {
-                                !app.tailscale.available -> Color.Transparent
-                                ts.isConnected -> StatusColors.done
-                                ts.running -> StatusColors.blocked
-                                else -> StatusColors.idle
-                            }
-                            Box(
-                                Modifier.size(8.dp).clip(CircleShape).background(dot)
-                                    .align(Alignment.TopEnd)
-                            )
-                        }
-                    }
-                    IconButton(onClick = onKeys) { Icon(Icons.Filled.Key, contentDescription = "SSH 鍵") }
-                    var more by remember { mutableStateOf(false) }
-                    Box {
-                        IconButton(onClick = { more = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "メニュー") }
-                        DropdownMenu(more, { more = false }) {
-                            DropdownMenuItem(text = { Text("拡張スクリプト") }, onClick = { more = false; onExtScripts() })
-                        }
-                    }
-                },
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { onEdit(null) }) { Icon(Icons.Filled.Add, contentDescription = "ホストを追加") }
-        },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (sessions.isNotEmpty()) {
-                item { SectionLabel("接続中") }
-                items(sessions, key = { it.id }) { s -> SessionRow(s, onClick = { onOpenSession(s.id) }) }
-                item { Spacer(Modifier.size(8.dp)) }
+    VeilBackdrop(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 20.dp)) {
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("androidTerminal", fontSize = 25.sp, fontWeight = FontWeight.Medium)
+                    Text("YOUR PRIVATE CONNECTION", fontSize = 10.sp, letterSpacing = 1.sp, color = CyanVeil.Muted)
+                }
+                VeilIconButton(R.drawable.veil_tune, "外観設定", onAppearance)
             }
-            item { SectionLabel("ホスト") }
-            if (hosts.isEmpty()) {
-                item {
-                    Text(
-                        "右下の + から Mac mini を登録してください。\nTailscale 経由なら、ホスト名は MagicDNS 名(例: mac-mini)か 100.x.y.z の IP です。",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+            Box(Modifier.weight(1f)) {
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 104.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (sessions.isNotEmpty()) {
+                        item { SectionHeading("接続中", "${sessions.size} SESSION${if (sessions.size > 1) "S" else ""}") }
+                        items(sessions, key = { "session-${it.id}" }) { session ->
+                            SessionRow(session, onClick = { onOpenSession(session.id) })
+                        }
+                    }
+                    item { SectionHeading("保存済みホスト", "${hosts.size} HOST${if (hosts.size != 1) "S" else ""}", Modifier.padding(top = 4.dp)) }
+                    if (hosts.isEmpty()) {
+                        item {
+                            VeilCard(Modifier.fillMaxWidth()) {
+                                Box(Modifier.size(48.dp).background(CyanVeil.Raised, CircleShape), contentAlignment = Alignment.Center) {
+                                    VeilIcon(R.drawable.veil_terminal, null, CyanVeil.Cyan)
+                                }
+                                Text("いつもの環境へ、つながる。", style = MaterialTheme.typography.titleMedium)
+                                Text("Mac mini や開発サーバーを登録して、\n手元から作業を始めましょう。", color = CyanVeil.Muted, style = MaterialTheme.typography.bodyMedium)
+                                Text("Tailscale の MagicDNS 名でも接続できます。", color = CyanVeil.Muted, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                    items(hosts.sortedByDescending { it.lastConnectedAt }, key = { "host-${it.id}" }) { host ->
+                        HostRow(host, onConnect = { onConnect(host) }, onEdit = { onEdit(host.id) })
+                    }
+                    item {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            FilledTonalButton(onTailscale, Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
+                                VeilIcon(R.drawable.veil_network, null, if (ts.isConnected) CyanVeil.Mint else CyanVeil.Cyan)
+                                Spacer(Modifier.width(8.dp)); Text("Tailscale", fontSize = 12.sp)
+                            }
+                            FilledTonalButton(onKeys, Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
+                                VeilIcon(R.drawable.veil_key, null, CyanVeil.Cyan)
+                                Spacer(Modifier.width(8.dp)); Text("SSH 鍵", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                    item {
+                        FilledTonalButton(onExtScripts, Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                            Icon(Icons.Filled.Code, null, tint = CyanVeil.Cyan)
+                            Spacer(Modifier.width(8.dp))
+                            Text("拡張スクリプト")
+                        }
+                    }
+                }
+                Button(onClick = { onEdit(null) }, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp).heightIn(min = 56.dp), shape = CircleShape) {
+                    VeilIcon(R.drawable.veil_plus, null, CyanVeil.Ink)
+                    Spacer(Modifier.width(8.dp)); Text("ホストを追加")
                 }
             }
-            items(hosts.sortedByDescending { it.lastConnectedAt }, key = { it.id }) { h ->
-                HostRow(h, onConnect = { onConnect(h) }, onEdit = { onEdit(h.id) })
-            }
         }
     }
 }
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-}
-
-@Composable
-private fun HostRow(h: HostProfile, onConnect: () -> Unit, onEdit: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onConnect),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Terminal, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(h.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val tags = buildList {
-                    if (h.useTailscale) add("Tailscale")
-                    if (h.herdrEnabled) add("マルチタブ")
-                }.joinToString(" · ")
-                Text(
-                    "${h.username}@${h.host}:${h.port}" + if (tags.isNotEmpty()) "  $tags" else "",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+internal fun HostRow(h: HostProfile, onConnect: () -> Unit, onEdit: () -> Unit) {
+    Surface(onClick = onConnect, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+        color = CyanVeil.Surface, border = BorderStroke(1.dp, CyanVeil.Border)) {
+        Row(Modifier.padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            VeilIcon(R.drawable.veil_terminal, null, CyanVeil.Cyan)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(h.displayName, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${h.username}@${h.host}:${h.port}", fontSize = 11.sp, fontFamily = FontFamily.Monospace,
+                    color = CyanVeil.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(buildList { add(if (h.useTailscale) "Tailscale" else "SSH"); if (h.herdrEnabled) add("マルチタブ"); if (h.useMosh) add("Mosh") }.joinToString(" · "), fontSize = 10.sp, color = CyanVeil.Muted)
             }
-            IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "編集") }
+            IconButton(onEdit) { VeilIcon(R.drawable.veil_edit, "${h.displayName}を編集", CyanVeil.Muted) }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SessionRow(s: SshTerminalSession, onClick: () -> Unit) {
     val state by s.state.collectAsState()
     val title by s.title.collectAsState()
     val herdr = s.herdr?.state?.collectAsState()?.value
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-    ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            val color = when (state) {
-                is ConnState.Connected -> StatusColors.done
-                is ConnState.Connecting -> StatusColors.working
-                is ConnState.Disconnected -> MaterialTheme.colorScheme.error
+    val (status, color) = when (state) {
+        is ConnState.Connected -> "● 接続中" to CyanVeil.Mint
+        is ConnState.Connecting -> "接続しています…" to CyanVeil.Cyan
+        is ConnState.Disconnected -> "切断" to CyanVeil.Rose
+    }
+    VeilCard(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.size(48.dp).background(CyanVeil.Raised, CircleShape), contentAlignment = Alignment.Center) {
+                VeilIcon(R.drawable.veil_terminal, null, CyanVeil.Cyan)
             }
-            Box(Modifier.size(10.dp).clip(CircleShape).background(color))
-            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(s.profile.displayName, style = MaterialTheme.typography.titleMedium)
-                Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            val blocked = herdr?.blockedCount ?: 0
-            if (blocked > 0) {
-                Text("入力待ち $blocked", color = StatusColors.blocked, style = MaterialTheme.typography.labelMedium)
+                Text(s.profile.displayName, fontSize = 22.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(title.takeUnless { it.isBlank() || it == s.profile.displayName } ?: "${s.profile.username} @ ${s.profile.host}",
+                    fontSize = 12.sp, color = CyanVeil.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            StatusPill(status, color)
+            if (s.profile.useTailscale) StatusPill("Tailscale")
+            val blocked = herdr?.blockedCount ?: 0
+            if (blocked > 0) StatusPill("入力待ち $blocked", CyanVeil.Amber)
+        }
+        Button(onClick, Modifier.align(Alignment.CenterHorizontally).heightIn(min = 52.dp)) { Text("セッションを開く") }
     }
 }

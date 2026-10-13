@@ -71,6 +71,15 @@ class TerminalCanvasView @JvmOverloads constructor(
             invalidate()
         }
 
+    /** Fade only the default background. Glyphs, selection, cursor and explicit ANSI fills stay opaque. */
+    var backgroundOpacity: Float = 0.72f
+        set(value) {
+            val opacity = if (value.isFinite()) value.coerceIn(0f, 1f) else 0.72f
+            if (field == opacity) return
+            field = opacity
+            invalidate()
+        }
+
     /** Sticky modifiers driven by the extra-keys bar. Consumed by the next key/char. */
     var modifiers: Modifiers? = null
 
@@ -132,8 +141,8 @@ class TerminalCanvasView @JvmOverloads constructor(
             invalidate()
         }
     private val composePaint = Paint().apply { isAntiAlias = true; typeface = TerminalFont.get(context) }
-    private val composeBg = Paint().apply { color = Color.parseColor("#FF2D333B") }
-    private val composeUnderline = Paint().apply { color = Color.parseColor("#FF58A6FF"); strokeWidth = 3f }
+    private val composeBg = Paint().apply { color = Color.parseColor("#FF173239") }
+    private val composeUnderline = Paint().apply { color = Color.parseColor("#FF64F4E5"); strokeWidth = 3f }
 
     init {
         composePaint.textSize = spToPx(textSizeSp).toFloat()
@@ -183,10 +192,12 @@ class TerminalCanvasView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         val emu = session?.emulator
         if (emu == null) {
-            canvas.drawColor(Color.BLACK)
+            canvas.drawColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+                Color.rgb(7, 18, 22), (255 * backgroundOpacity).roundToInt()))
             return
         }
-        canvas.drawColor(emu.mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND])
+        canvas.drawColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+            emu.mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND], (255 * backgroundOpacity).roundToInt()))
         if (selActive) {
             val (sy, sx, ey, ex) = selectionBounds()
             renderer.render(emu, canvas, topRow, sy, ey, sx, ex)
@@ -530,7 +541,7 @@ class TerminalCanvasView @JvmOverloads constructor(
 
     private val handleRadius = 9f * resources.displayMetrics.density
     private val handleSlop = 24f * resources.displayMetrics.density
-    private val handlePaint = Paint().apply { isAntiAlias = true; color = Color.parseColor("#FF58A6FF") }
+    private val handlePaint = Paint().apply { isAntiAlias = true; color = Color.parseColor("#FF64F4E5") }
 
     private fun selOrdered(): Boolean =
         selStartRow < selEndRow || (selStartRow == selEndRow && selStartCol <= selEndCol)

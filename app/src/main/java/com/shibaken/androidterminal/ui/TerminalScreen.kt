@@ -2,6 +2,7 @@ package com.shibaken.androidterminal.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -16,6 +17,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,7 +33,6 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
@@ -61,12 +62,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.shibaken.androidterminal.App
+import com.shibaken.androidterminal.R
 import com.shibaken.androidterminal.herdr.HerdrState
 import com.shibaken.androidterminal.session.ConnState
 import com.shibaken.androidterminal.session.SessionMode
@@ -78,7 +82,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun TerminalScreen(sessionId: String, onBack: () -> Unit) {
+fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext as App
     val session = remember(sessionId) { app.sessions.get(sessionId) }
@@ -92,6 +96,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit) {
         return
     }
 
+    val appearance = LocalAppearance.current
     val state by session.state.collectAsState()
     val title by session.title.collectAsState()
     val herdr = session.herdr
@@ -115,6 +120,10 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit) {
         PaneViewPool(context, modifiers, session.profile.fontSizeSp) { size ->
             app.hosts.get(session.profile.id)?.let { app.hosts.save(it.copy(fontSizeSp = size)) }
         }
+    }
+    SideEffect {
+        view.backgroundOpacity = appearance.backgroundOpacity
+        pool.backgroundOpacity = appearance.backgroundOpacity
     }
     DisposableEffect(pool) { onDispose { pool.clear() } }
 
@@ -174,25 +183,32 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit) {
             }
         },
     ) {
+        VeilBackdrop(Modifier.fillMaxSize()) {
         Box(
             Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
                 .systemBarsPadding()
                 .imePadding()
         ) {
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()
+            .then(if (showOverview) Modifier.clearAndSetSemantics { } else Modifier)
+            .padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // --- top bar -----------------------------------------------------------------
             Row(
-                Modifier.fillMaxWidth().height(44.dp).background(MaterialTheme.colorScheme.surfaceContainer),
+                Modifier.fillMaxWidth().height(56.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "ホスト一覧") }
+                VeilIconButton(R.drawable.veil_back, "ホスト一覧", onBack)
+                Spacer(Modifier.width(10.dp))
                 if (herdr != null && !isPanes) {
                     IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Filled.Menu, "ワークスペースを開く") }
                 }
                 Column(Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (isPanes) {
+                        Text(if (state is ConnState.Connected) "● 接続中" + if (session.profile.useTailscale) " / Tailscale" else " / SSH" else "セッション",
+                            style = MaterialTheme.typography.labelSmall, color = CyanVeil.Mint)
+                    }
                     if (!isPanes) {
                         val focused = herdrState.pane(herdrState.focusedPaneId)
                         val sub = if (focused != null) {
@@ -216,9 +232,11 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit) {
                         Text("入力待ち ${herdrState.blockedCount}", style = MaterialTheme.typography.labelMedium, color = StatusColors.blocked)
                     }
                 }
+                VeilIconButton(R.drawable.veil_tune, "外観設定", onAppearance)
                 Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "メニュー") }
                     DropdownMenu(menu, { menu = false }) {
+                        DropdownMenuItem(text = { Text("外観設定") }, onClick = { menu = false; onAppearance() })
                         DropdownMenuItem(
                             text = { Text(if (directInput) "日本語入力を使う" else "直接入力(変換なし)にする") },
                             onClick = { directInput = !directInput; view.directInput = directInput; pool.directInput = directInput; menu = false },
@@ -267,16 +285,27 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit) {
                 ConnState.Connected -> {}
             }
 
+            if (!imeVisible && isPanes) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    VeilIcon(R.drawable.veil_folder, null, CyanVeil.Muted)
+                    Spacer(Modifier.width(8.dp))
+                    Text(listOfNotNull(herdrState.workspace(herdrState.focusedWorkspaceId)?.title,
+                        herdrState.tabs.firstOrNull { it.tabId == herdrState.focusedTabId }?.title).joinToString(" / "),
+                        style = MaterialTheme.typography.labelMedium, color = CyanVeil.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            val terminalModifier = Modifier.weight(1f).fillMaxWidth().clip(MaterialTheme.shapes.large)
+                .border(1.dp, CyanVeil.Border, MaterialTheme.shapes.large).padding(8.dp)
             // --- terminal -----------------------------------------------------------------
             if (herdr != null && mode == SessionMode.PANES) {
                 PaneLayout(
                     session = session, state = herdrState, herdr = herdr, pool = pool,
                     onOpenComposer = { showComposer = true },
                     inputEnabled = !showOverview && !drawerState.isOpen,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    modifier = terminalModifier,
                 )
             } else {
-                AndroidView(factory = { view }, modifier = Modifier.weight(1f).fillMaxWidth())
+                AndroidView(factory = { view }, modifier = terminalModifier)
             }
 
             // --- tab strip (+ quick actions in the legacy TUI mode) -----------------------
@@ -319,11 +348,21 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit) {
                 extKeys = extRegistry?.keys?.map { it.label } ?: emptyList(),
                 onExtKey = { i -> extRt?.engine?.pressKey(i, if (isPanes) focusedPaneId else "shell") },
             )
+            if (isPanes && !imeVisible) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(100.dp)).background(CyanVeil.Surface)
+                    .clickable { showComposer = true }.padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    VeilIcon(R.drawable.veil_edit, null, CyanVeil.Cyan)
+                    Spacer(Modifier.width(12.dp))
+                    Text("日本語で返信を作成…", color = CyanVeil.Muted, style = MaterialTheme.typography.bodySmall)
+                }
+            }
         }
         if (showOverview && herdr != null) {
-            PaneOverview(herdrState, herdr, onDismiss = { showOverview = false }, modifier = Modifier.fillMaxSize())
+            PaneOverview(herdrState, herdr, onDismiss = { showOverview = false }, modifier = Modifier.fillMaxSize().zIndex(1f))
         }
         SnackbarHost(snackbarHost, Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp))
+        }
         }
     }
 

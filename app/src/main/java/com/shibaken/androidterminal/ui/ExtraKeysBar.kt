@@ -2,6 +2,8 @@ package com.shibaken.androidterminal.ui
 
 import android.view.KeyEvent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import com.shibaken.androidterminal.R
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -15,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,20 +52,18 @@ fun ExtraKeysBar(
     onExtKey: (Int) -> Unit = {},
 ) {
     Column {
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Row(
         Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(horizontal = 4.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Pinned: always reachable even when the key row is scrolled.
         Key("⌨", desc = "キーボードの表示/非表示", onTap = onKeyboard)
         Row(
             Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Key("ESC") { view.sendKey(KeyEvent.KEYCODE_ESCAPE) }
@@ -95,7 +94,7 @@ private fun KeyBox(label: String, desc: String?, active: Boolean, accent: Boolea
     val bg = when {
         active -> MaterialTheme.colorScheme.primary
         accent -> MaterialTheme.colorScheme.surfaceContainerHighest
-        else -> MaterialTheme.colorScheme.surfaceContainerHighest
+        else -> MaterialTheme.colorScheme.surface
     }
     val fg = when {
         active -> MaterialTheme.colorScheme.onPrimary
@@ -105,25 +104,26 @@ private fun KeyBox(label: String, desc: String?, active: Boolean, accent: Boolea
     Box(
         modifier
             .semantics { desc?.let { contentDescription = it } }
-            .height(44.dp)
-            .widthIn(min = 44.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .height(48.dp)
+            .widthIn(min = 48.dp)
+            .clip(RoundedCornerShape(12.dp))
             .background(bg)
             .border(
                 1.dp,
-                if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                RoundedCornerShape(6.dp),
+                if (active) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
+                RoundedCornerShape(12.dp),
             )
             .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = fg, fontFamily = FontFamily.Monospace, fontSize = 15.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
+        if (label == "⌨") VeilIcon(R.drawable.veil_keyboard, null, CyanVeil.Cyan)
+        else Text(label, color = fg, fontFamily = FontFamily.Monospace, fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
     }
 }
 
 @Composable
 private fun Key(label: String, active: Boolean = false, accent: Boolean = false, desc: String? = null, onTap: () -> Unit) {
-    KeyBox(label, desc, active, accent, Modifier.pointerInput(onTap) { detectTapGestures(onTap = { onTap() }) })
+    KeyBox(label, desc, active, accent, Modifier.clickable(onClick = onTap))
 }
 
 /** Repeats while held (arrows). */

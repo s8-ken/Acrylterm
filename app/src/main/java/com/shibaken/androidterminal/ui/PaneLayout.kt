@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
@@ -77,6 +78,12 @@ class PaneViewPool(
     var textSizeSp by mutableFloatStateOf(initialTextSizeSp)
         private set
 
+    var backgroundOpacity = 0.72f
+        set(value) {
+            field = value
+            views.values.forEach { it.backgroundOpacity = value }
+        }
+
     var directInput = false
         set(value) {
             field = value
@@ -86,6 +93,7 @@ class PaneViewPool(
     fun get(paneId: String): TerminalCanvasView = views.getOrPut(paneId) {
         TerminalCanvasView(context).apply {
             this.modifiers = this@PaneViewPool.modifiers
+            backgroundOpacity = this@PaneViewPool.backgroundOpacity
             paneMode = true
             isPaneFocused = false
             directInput = this@PaneViewPool.directInput
@@ -292,7 +300,7 @@ private fun PaneItem(
         if (active) view.requestFocus()
     }
     val attached = backend?.attached?.collectAsState()?.value ?: false
-    Box(modifier) {
+    Box(modifier.clip(MaterialTheme.shapes.medium)) {
       Column(Modifier.fillMaxSize()) {
         AndroidView(
             factory = {
@@ -302,6 +310,8 @@ private fun PaneItem(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             update = { v ->
                 if (v.session !== backend) v.session = backend
+                v.importantForAccessibility = if (inputEnabled) android.view.View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+                    else android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                 v.isPaneFocused = active
                 v.onFocusRequest = onFocus
                 v.onDoubleTap = onDoubleTap
@@ -322,7 +332,7 @@ private fun PaneItem(
             )
         }
         if (outline) {
-            Box(Modifier.fillMaxSize().border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)))
+            Box(Modifier.fillMaxSize().border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f), MaterialTheme.shapes.medium))
         }
     }
 }

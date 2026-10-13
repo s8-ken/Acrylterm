@@ -6,8 +6,13 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import com.shibaken.androidterminal.ui.AppearanceScreen
+import com.shibaken.androidterminal.ui.LocalAppearance
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -34,7 +39,8 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         handleIntent(intent)
 
@@ -52,6 +58,8 @@ class MainActivity : FragmentActivity() {
                     nav.navigate("terminal/$sessionId") { launchSingleTop = true }
                 }
 
+                val appearance by app.appearance.settings.collectAsState()
+                CompositionLocalProvider(LocalAppearance provides appearance) {
                 NavHost(navController = nav, startDestination = "hosts") {
                     composable("hosts") {
                         HostListScreen(
@@ -64,6 +72,7 @@ class MainActivity : FragmentActivity() {
                             onKeys = { nav.navigate("keys") },
                             onTailscale = { nav.navigate("tailscale") },
                             onExtScripts = { nav.navigate("ext") },
+                            onAppearance = { nav.navigate("appearance") },
                         )
                     }
                     composable("host/{id}") { entry ->
@@ -73,6 +82,7 @@ class MainActivity : FragmentActivity() {
                             onManageKeys = { nav.navigate("keys") },
                         )
                     }
+                    composable("appearance") { AppearanceScreen(onBack = { nav.popBackStack() }) }
                     composable("keys") { KeysScreen(onBack = { nav.popBackStack() }) }
                     composable("ext") { ExtScriptsScreen(onBack = { nav.popBackStack() }) }
                     composable("tailscale") { TailscaleScreen(onBack = { nav.popBackStack() }) }
@@ -80,8 +90,10 @@ class MainActivity : FragmentActivity() {
                         TerminalScreen(
                             sessionId = entry.arguments?.getString("sessionId") ?: "",
                             onBack = { nav.popBackStack("hosts", inclusive = false) },
+                            onAppearance = { nav.navigate("appearance") },
                         )
                     }
+                }
                 }
             }
         }

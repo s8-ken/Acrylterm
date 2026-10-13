@@ -1,6 +1,8 @@
 package com.shibaken.androidterminal
 
 import android.app.Application
+import com.shibaken.androidterminal.data.AppearanceRepository
+import com.shibaken.androidterminal.terminal.CyanVeilTerminalPalette
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import com.shibaken.androidterminal.data.HostRepository
@@ -15,6 +17,8 @@ import java.security.Security
 
 class App : Application() {
 
+    lateinit var appearance: AppearanceRepository
+        private set
     lateinit var hosts: HostRepository
         private set
     lateinit var knownHosts: KnownHostsRepository
@@ -34,6 +38,8 @@ class App : Application() {
         installBouncyCastle()
         createNotificationChannels()
 
+        appearance = AppearanceRepository(this)
+        CyanVeilTerminalPalette.install()
         hosts = HostRepository(this)
         knownHosts = KnownHostsRepository(this)
         keys = KeyRepository(this)

@@ -1,0 +1,158 @@
+package com.shibaken.androidterminal
+
+import android.app.Instrumentation
+import android.content.Intent
+import android.graphics.Bitmap
+import android.view.accessibility.AccessibilityNodeInfo
+import com.shibaken.androidterminal.data.AppearanceSettings
+import com.shibaken.androidterminal.data.HostProfile
+import com.shibaken.androidterminal.herdr.*
+import com.shibaken.androidterminal.session.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import java.io.File
+
+/** Optional emulator-only visual fixture. It never opens a network connection or ships in the APK. */
+internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
+    private val app = instrumentation.targetContext.applicationContext as App
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val terminals = mutableListOf<PaneTerminal>()
+    private lateinit var session: SshTerminalSession
+
+    fun verifyAndCapture() {
+        val appearance = app.appearance.settings.value
+        val sessions = app.sessions.sessions.value
+        val host = HostProfile(name = "Mac mini", host = "mac-mini.local", username = "shibaken")
+        val server = HostProfile(name = "Development", host = "dev.example.test", username = "dev", useTailscale = false)
+        var activity: MainActivity? = null
+        try {
+            instrumentation.runOnMainSync {
+                app.appearance.save(AppearanceSettings())
+                app.hosts.save(host); app.hosts.save(server)
+                session = SshTerminalSession(app, host, AgentAlertListener { _, _, _ -> })
+                setFlow(session, "_state", ConnState.Connected)
+                val tabs = listOf("androidTerminal", "infra", "notes").mapIndexed { i, label -> TabInfo("t$i", "w1", label = label) }
+                val panes = tabs.mapIndexed { i, tab -> PaneInfo("p$i", "w1", tab.tabId,
+                    label = listOf("Codex", "deploy", "shell")[i],
+                    agentStatus = listOf(AgentStatus.BLOCKED, AgentStatus.WORKING, AgentStatus.IDLE)[i]) }
+                val state = HerdrState(phase = HerdrState.Phase.READY,
+                    workspaces = listOf(WorkspaceInfo("w1", label = "Development")), tabs = tabs, panes = panes,
+                    focusedWorkspaceId = "w1", focusedTabId = "t0", focusedPaneId = "p0")
+                setFlow(session.herdr!!, "_state", state)
+                val backends = panes.associate { pane ->
+                    pane.paneId to PaneTerminal(app, scope).also { term ->
+                        terminals += term
+                        setFlow(term, "_attached", true)
+                        val content = "\u001b[36m❯ ~/workspace/androidTerminal\u001b[0m\r\n\r\n" +
+                            "\u001b[32m✓ Connected to Mac mini\u001b[0m\r\n\r\n" +
+                            "❯ git status --short\r\n" +
+                            " M app/ui/Theme.kt\r\n M app/ui/TerminalScreen.kt\r\n\r\n" +
+                            "\u001b[36mCodex\u001b[0m\r\nUI update is ready.\r\n\r\n" +
+                            "\u001b[33mApply these changes?\u001b[0m\r\n1. Yes, continue\r\n2. Review the diff\r\n\r\n❯ "
+                        val bytes = content.toByteArray()
+                        term.emulator.append(bytes, bytes.size)
+                    }
+                }
+                setFlow(session, "_panes", backends)
+                setFlow(app.sessions, "_sessions", sessions + session)
+            }
+            activity = instrumentation.startActivitySync(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+            settle()
+            capture("hosts-populated")
+            click("セッションを開く")
+            awaitNode { it.contentDescription?.startsWith("タブ一覧") == true }
+            capture("terminal")
+            click("タブ一覧", prefix = true)
+            awaitNode { it.text?.toString() == "タブとペイン" }
+            capture("overview")
+            var card = awaitNode { it.contentDescription?.startsWith("androidTerminal、") == true }
+            while (!card.isLongClickable) card = checkNotNull(card.parent)
+            check(card.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK))
+            settle()
+            click("androidTerminalを閉じる")
+            awaitNode { it.text?.toString() == "タブを閉じる" }
+            click("キャンセル")
+            awaitNode { it.text?.toString() == "タブとペイン" }
+            click("一覧を閉じる")
+            click("キーボードの表示/非表示")
+            capture("terminal-keyboard")
+        } catch (error: Throwable) {
+            capture("failure")
+            val tree = StringBuilder()
+            fun record(node: AccessibilityNodeInfo?, depth: Int = 0) {
+                node ?: return
+                tree.appendLine("${"  ".repeat(depth)}text=${node.text} description=${node.contentDescription} clickable=${node.isClickable}")
+                for (i in 0 until node.childCount) record(node.getChild(i), depth + 1)
+            }
+            record(instrumentation.uiAutomation.rootInActiveWindow)
+            File(app.filesDir, "cyan-veil-captures/failure.txt").writeText(tree.toString())
+            throw error
+        } finally {
+            instrumentation.runOnMainSync {
+                activity?.finish()
+                if (::session.isInitialized) session.dispose()
+                terminals.forEach { it.close() }
+                setFlow(app.sessions, "_sessions", sessions)
+                app.hosts.delete(host.id); app.hosts.delete(server.id)
+                app.appearance.save(appearance)
+                scope.cancel()
+            }
+        }
+    }
+
+    private fun settle() {
+        instrumentation.waitForIdleSync()
+        // Compose schedules recomposition and rendering on subsequent Choreographer frames.
+        // Accessibility idle alone can return before that frame has reached the screen.
+        android.os.SystemClock.sleep(500)
+        instrumentation.uiAutomation.waitForIdle(500, 5_000)
+    }
+
+    private fun click(label: String, prefix: Boolean = false) {
+        val node = awaitNode { n ->
+            listOf(n.text?.toString(), n.contentDescription?.toString()).any { it != null && if (prefix) it.startsWith(label) else it == label }
+        }
+        var target: AccessibilityNodeInfo? = node
+        while (target != null && !target.isClickable) target = target.parent
+        check(target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) { "Cannot click: $label" }
+        settle()
+    }
+
+    private fun awaitNode(predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo {
+        val deadline = android.os.SystemClock.uptimeMillis() + 10_000
+        do {
+            find(predicate)?.let { return it }
+            android.os.SystemClock.sleep(200)
+        } while (android.os.SystemClock.uptimeMillis() < deadline)
+        error("Expected UI state did not become accessible")
+    }
+
+    private fun find(predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
+        if (android.os.Build.VERSION.SDK_INT >= 34) instrumentation.uiAutomation.clearCache()
+        fun visit(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+            node ?: return null
+            if (predicate(node)) return node
+            for (i in 0 until node.childCount) visit(node.getChild(i))?.let { return it }
+            return null
+        }
+        return visit(instrumentation.uiAutomation.rootInActiveWindow)
+    }
+
+    private fun capture(name: String) {
+        settle()
+        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val directory = File(app.filesDir, "cyan-veil-captures").apply { mkdirs() }
+        File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
+    }
+
+    /** Fixture injection is confined to androidTest; production state remains private. */
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> setFlow(owner: Any, field: String, value: T) {
+        val state = owner.javaClass.getDeclaredField(field).apply { isAccessible = true }.get(owner) as MutableStateFlow<T>
+        state.value = value
+    }
+}

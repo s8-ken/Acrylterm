@@ -323,8 +323,8 @@ class HerdrController(private val alerts: AgentAlertListener) {
         put("ratio", ratio)
     })
 
-    fun newTab() = act("tab.create", buildJsonObject {
-        _state.value.focusedWorkspaceId?.let { put("workspace_id", it) }
+    fun newTab(workspaceId: String? = _state.value.focusedWorkspaceId) = act("tab.create", buildJsonObject {
+        workspaceId?.let { put("workspace_id", it) }
         put("focus", true)
     })
 

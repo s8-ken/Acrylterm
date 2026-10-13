@@ -19,14 +19,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +42,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.shibaken.androidterminal.R
 import com.shibaken.androidterminal.herdr.AgentStatus
 import com.shibaken.androidterminal.herdr.HerdrController
 import com.shibaken.androidterminal.herdr.HerdrState
@@ -77,11 +74,11 @@ fun HerdrTabStrip(
     val currentOverview = rememberUpdatedState(onOpenOverview)
 
     Column {
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Row(
         Modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(52.dp)
+            .clip(RoundedCornerShape(100.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .pointerInput(Unit) {
                 // Observe only (no consume) so taps still work; act on release.
@@ -104,7 +101,7 @@ fun HerdrTabStrip(
             },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onOpenDrawer, Modifier.size(40.dp)) { Icon(Icons.Filled.Menu, "ワークスペースを開く", tint = tint) }
+        IconButton(onClick = onOpenDrawer, Modifier.size(48.dp)) { Icon(Icons.Filled.Menu, "ワークスペースを開く", tint = tint) }
         LazyRow(
             Modifier.weight(1f),
             state = listState,
@@ -114,15 +111,15 @@ fun HerdrTabStrip(
             itemsIndexed(tabs, key = { _, t -> t.tabId }) { _, tab ->
                 val focused = tab.tabId == state.focusedTabId
                 val blocked = state.panes.any { it.tabId == tab.tabId && it.agentStatus == AgentStatus.BLOCKED }
-                val bg = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
-                val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                val bg = if (focused) CyanVeil.Raised else androidx.compose.ui.graphics.Color.Transparent
+                val fg = if (focused) CyanVeil.Cyan else CyanVeil.Muted
                 Row(
                     Modifier
                         .heightIn(min = 40.dp)
                         .widthIn(min = 48.dp, max = 160.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .background(bg)
-                        .border(1.dp, if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
+                        .border(1.dp, androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(20.dp))
                         .clickable { herdr.focusTab(tab.tabId) }
                         .semantics {
                             selected = focused
@@ -147,14 +144,14 @@ fun HerdrTabStrip(
                 }
             }
         }
-        IconButton(onClick = onOpenOverview, Modifier.size(40.dp)) {
+        IconButton(onClick = onOpenOverview, Modifier.size(48.dp)) {
             val n = state.blockedCount
             BadgedBox(badge = {
                 if (n > 0) Badge(containerColor = StatusColors.blocked, contentColor = MaterialTheme.colorScheme.background) { Text("$n") }
-            }) { Icon(Icons.Filled.GridView, "タブ一覧" + if (n > 0) "(入力待ち $n 件)" else "", tint = tint) }
+            }) { VeilIcon(R.drawable.veil_grid, "タブ一覧" + if (n > 0) "(入力待ち $n 件)" else "", CyanVeil.Cyan) }
         }
-        IconButton(onClick = onOpenComposer, Modifier.size(40.dp)) { Icon(Icons.Filled.Edit, "メッセージを作成", tint = tint) }
-        IconButton(onClick = { herdr.newTab() }, Modifier.size(40.dp)) { Icon(Icons.Filled.Add, "新しいタブ", tint = tint) }
+        IconButton(onClick = onOpenComposer, Modifier.size(48.dp)) { VeilIcon(R.drawable.veil_edit, "メッセージを作成", tint) }
+        IconButton(onClick = { herdr.newTab() }, Modifier.size(48.dp)) { VeilIcon(R.drawable.veil_plus, "新しいタブ", tint) }
     }
     }
 }

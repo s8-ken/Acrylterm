@@ -6,6 +6,11 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.sp
+import com.shibaken.androidterminal.R
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -14,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardReturn
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,7 +43,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 
-val QuickReplyBarHeight = 52.dp
+val QuickReplyBarHeight = 88.dp
 
 /**
  * Chips docked at the bottom of a pane whose agent is waiting for input. Only composed while the
@@ -72,8 +76,10 @@ fun QuickReplyBar(paneId: String, terminal: PaneTerminal?, herdr: HerdrControlle
             terminal.screenRevision.collectLatest { delay(300); refresh() }
         }
     }
+    Column(modifier.padding(4.dp).clip(RoundedCornerShape(12.dp)).background(CyanVeil.Raised).padding(horizontal = 8.dp, vertical = 6.dp)) {
+    Text("入力待ち · エージェント", fontSize = 10.sp, color = CyanVeil.Amber)
     Row(
-        modifier.padding(horizontal = 8.dp, vertical = 6.dp).horizontalScroll(rememberScrollState()),
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -86,7 +92,8 @@ fun QuickReplyBar(paneId: String, terminal: PaneTerminal?, herdr: HerdrControlle
                 }
             }
         }
-        Chip("メッセージを作成", onClick = onCompose) { Icon(Icons.Filled.Edit, null, tint = chipFg()) }
+        Chip("メッセージを作成", onClick = onCompose) { VeilIcon(R.drawable.veil_edit, null, chipFg()) }
+    }
     }
 }
 
@@ -97,10 +104,10 @@ private fun chipFg() = MaterialTheme.colorScheme.background
 private fun Chip(description: String, onClick: () -> Unit, content: @Composable () -> Unit) {
     Box(
         Modifier
-            .height(40.dp)
-            .widthIn(min = 44.dp)
+            .height(48.dp)
+            .widthIn(min = 48.dp)
             .clip(CircleShape)
-            .background(StatusColors.blocked)
+            .background(CyanVeil.Cyan)
             .clickable(onClick = onClick)
             .semantics { contentDescription = description }
             .padding(horizontal = 10.dp),
