@@ -56,6 +56,7 @@
 - 最初から herdr 前提で作る(2026-10-12、ユーザー判断)
 - ビルドは Mac の Android Studio で行う
 - herdr は 0.9.3 に更新し、0.9 系を主な対象にする。0.8 系との互換も保つ
+- 2026-10-12 Mac の herdr を 0.9.3 に更新(検証済み)
 - 主な技術:Kotlin + Jetpack Compose
   - ターミナルエミュレータ:Termux の terminal-emulator を取り込んで使う
   - SSH:sshj 0.41

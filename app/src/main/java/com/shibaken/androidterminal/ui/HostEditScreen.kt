@@ -64,8 +64,11 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
     var keyId by remember { mutableStateOf(original.keyId ?: keys.firstOrNull()?.id) }
     var useTs by remember { mutableStateOf(original.useTailscale && app.tailscale.available) }
     var herdr by remember { mutableStateOf(original.herdrEnabled) }
+    var useMosh by remember { mutableStateOf(original.useMosh) }
     var startup by remember { mutableStateOf(original.startupCommand) }
     var herdrSession by remember { mutableStateOf(original.herdrSession) }
+    var extEnabled by remember { mutableStateOf(original.extEnabled) }
+    var extFromHost by remember { mutableStateOf(original.extLoadFromHost) }
     var confirmDelete by remember { mutableStateOf(false) }
 
     val valid = host.isNotBlank() && user.isNotBlank() && (port.toIntOrNull() ?: 0) in 1..65535 &&
@@ -76,8 +79,9 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
             original.copy(
                 name = name.trim(), host = host.trim(), port = port.toInt(), username = user.trim(),
                 authMethod = auth, keyId = if (auth == AuthMethod.KEY) keyId else null,
-                useTailscale = useTs, herdrEnabled = herdr,
+                useTailscale = useTs, herdrEnabled = herdr, useMosh = useMosh,
                 startupCommand = startup.trim(), herdrSession = herdrSession.trim(),
+                extEnabled = extEnabled, extLoadFromHost = extEnabled && extFromHost,
             )
         )
         onDone()
@@ -165,20 +169,36 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
                 else "このビルドには Tailscale が組み込まれていません(端末側の VPN を使ってください)",
                 useTs, enabled = app.tailscale.available,
             ) { useTs = it }
-            SwitchRow("herdr 連携", "ドロワーでワークスペース/ペイン/エージェント状態を表示・操作し、入力待ちを通知します", herdr) { herdr = it }
+            SwitchRow("マルチタブ / マルチペイン", "タブと画面分割を使い、エージェントの入力待ちを通知します", herdr) { herdr = it }
+            if (herdr) SwitchRow("Mosh", "ペインを Mosh で表示(回線が切り替わっても維持)。mosh-server が必要", useMosh) { useMosh = it }
 
-            OutlinedTextField(
-                startup, { startup = it }, label = { Text("ログイン後に実行するコマンド") }, singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                supportingText = { Text("例: herdr / herdr --session work / 空欄なら通常のシェル") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-            )
-            if (herdr) {
+            SwitchRow("拡張スクリプト", "", extEnabled) { extEnabled = it }
+            SwitchRow("ホストのスクリプトを読み込む", "", extFromHost && extEnabled, enabled = extEnabled) { extFromHost = it }
+
+            if (!herdr) {
                 OutlinedTextField(
-                    herdrSession, { herdrSession = it }, label = { Text("herdr セッション名(任意)") }, singleLine = true,
+                    startup, { startup = it }, label = { Text("ログイン後に実行するコマンド") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    supportingText = { Text("--session を使う場合のみ。空欄ならデフォルトセッション") },
+                    supportingText = { Text("空欄なら通常のシェル") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                 )
+            } else {
+                var advanced by remember { mutableStateOf(false) }
+                TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "詳細 ▲" else "詳細 ▼") }
+                if (advanced) {
+                    OutlinedTextField(
+                        herdrSession, { herdrSession = it }, label = { Text("バックエンドのセッション名") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        supportingText = { Text("空欄なら android。パソコン側の作業と分けたいときに変更します") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                    )
+                    OutlinedTextField(
+                        startup, { startup = it }, label = { Text("互換モードで実行するコマンド") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        supportingText = { Text("マルチタブが使えない環境でだけ使われます") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                    )
+                }
             }
         }
     }
@@ -201,7 +221,7 @@ fun SwitchRow(title: String, subtitle: String, checked: Boolean, enabled: Boolea
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.width(12.dp))
         Switch(checked, onChange, enabled = enabled)

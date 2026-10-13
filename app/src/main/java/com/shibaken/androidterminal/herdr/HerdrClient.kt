@@ -52,14 +52,14 @@ class HerdrClient(private val conn: SshConnection, val socketPath: String) {
                 val ch = try {
                     conn.openStreamLocal(socketPath)
                 } catch (e: Exception) {
-                    throw HerdrException("unreachable", "herdr のソケットに接続できません(herdr が起動していない可能性があります): ${e.message}")
+                    throw HerdrException("unreachable", "ソケットに接続できません(サーバーが起動していない可能性があります): ${e.message}")
                 }
                 try {
                     val out = ch.outputStream
                     out.write((line + "\n").toByteArray(Charsets.UTF_8))
                     out.flush()
                     val reader = BufferedReader(InputStreamReader(ch.inputStream, Charsets.UTF_8))
-                    val reply = reader.readLine() ?: throw IOException("herdr closed the connection without replying")
+                    val reply = reader.readLine() ?: throw IOException("応答がありませんでした")
                     parseResult(AppJson.parseToJsonElement(reply).jsonObject)
                 } finally {
                     runCatching { ch.close() }
@@ -72,7 +72,7 @@ class HerdrClient(private val conn: SshConnection, val socketPath: String) {
             val e = err.jsonObject
             throw HerdrException(
                 e["code"]?.jsonPrimitive?.contentOrNull ?: "error",
-                e["message"]?.jsonPrimitive?.contentOrNull ?: "herdr error",
+                e["message"]?.jsonPrimitive?.contentOrNull ?: "エラー",
             )
         }
         return obj["result"]?.jsonObject ?: JsonObject(emptyMap())
@@ -116,6 +116,13 @@ class HerdrClient(private val conn: SshConnection, val socketPath: String) {
 
     companion object {
         fun eventName(ev: JsonObject): String = ev["event"]?.jsonPrimitive?.contentOrNull ?: ""
+
+        /** Canonical form of an event name: lower case, '.' -> '_' (0.9 mixes `pane_focused` and `pane.agent_status_changed`). */
+        fun normalizeEvent(name: String): String = name.trim().lowercase().replace('.', '_')
+
+        /** True when [a] and [b] name the same event regardless of '.'/'_' spelling. */
+        fun sameEvent(a: String, b: String): Boolean = normalizeEvent(a) == normalizeEvent(b)
+
         fun eventData(ev: JsonObject): JsonElement? = ev["data"]
     }
 }

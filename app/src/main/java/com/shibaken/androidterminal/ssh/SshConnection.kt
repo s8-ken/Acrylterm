@@ -7,6 +7,8 @@ import com.shibaken.androidterminal.data.KnownHost
 import com.shibaken.androidterminal.keys.SshKeys
 import com.shibaken.androidterminal.session.Prompter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import net.schmizz.keepalive.KeepAliveProvider
@@ -104,8 +106,7 @@ class SshConnection(private val app: App, val profile: HostProfile) {
         }
     }
 
-    /** Starts an interactive shell with a PTY. */
-    fun openShell(cols: Int, rows: Int, widthPx: Int, heightPx: Int): Pair<Session, Session.Shell> {
+    private fun newPtySession(cols: Int, rows: Int, widthPx: Int, heightPx: Int): Session {
         val session = client.startSession()
         try {
             session.setEnvVar("LANG", "ja_JP.UTF-8")
@@ -113,7 +114,35 @@ class SshConnection(private val app: App, val profile: HostProfile) {
             // sshd may not AcceptEnv LANG; not fatal.
         }
         session.allocatePTY("xterm-256color", cols, rows, widthPx, heightPx, emptyMap<PTYMode, Int>())
-        return session to session.startShell()
+        return session
+    }
+
+    /** Starts an interactive shell with a PTY. Blocking. */
+    fun openShell(cols: Int, rows: Int, widthPx: Int, heightPx: Int): PtyChannel {
+        val session = newPtySession(cols, rows, widthPx, heightPx)
+        val shell = session.startShell()
+        return PtyChannel(session, shell.inputStream, shell.outputStream, cols, rows) { c, r, w, h ->
+            shell.changeWindowDimensions(c, r, w, h)
+        }
+    }
+
+    /**
+     * Runs [command] with a PTY through the user's login shell (see [RemoteCommand.viaLoginShell]).
+     * Blocking. window-change works because sshj's exec() returns the same SessionChannel,
+     * which implements Session.Shell.changeWindowDimensions (checked with javap on sshj 0.41.1).
+     */
+    fun openPtyExec(command: String, cols: Int, rows: Int, widthPx: Int, heightPx: Int): PtyChannel {
+        val session = newPtySession(cols, rows, widthPx, heightPx)
+        try {
+            val cmd = session.exec(RemoteCommand.viaLoginShell(command))
+            val dims = cmd as Session.Shell
+            return PtyChannel(session, cmd.inputStream, cmd.outputStream, cols, rows) { c, r, w, h ->
+                dims.changeWindowDimensions(c, r, w, h)
+            }
+        } catch (e: Exception) {
+            runCatching { session.close() }
+            throw e
+        }
     }
 
     /** Runs a non-interactive command and returns stdout (trimmed of a trailing newline). */
@@ -124,6 +153,34 @@ class SshConnection(private val app: App, val profile: HostProfile) {
             cmd.join(timeoutSec, TimeUnit.SECONDS)
             out.trimEnd('\n', '\r')
         }
+    }
+
+    /**
+     * Runs a non-interactive command and returns everything it prints (stdout; add `2>&1` for stderr)
+     * once it closes its output. A watchdog closes the channel after [timeoutMs], returning what was read so far.
+     */
+    suspend fun execAll(command: String, timeoutMs: Long): String = withContext(Dispatchers.IO) {
+        val s = client.startSession()
+        val sb = StringBuilder()
+        val watchdog = launch { delay(timeoutMs); runCatching { s.close() } }
+        try {
+            val cmd = s.exec(command)
+            val r = cmd.inputStream.bufferedReader()
+            val buf = CharArray(1024)
+            try {
+                while (true) {
+                    val n = r.read(buf)
+                    if (n < 0) break
+                    sb.append(buf, 0, n)
+                }
+            } catch (e: IOException) {
+                if (!watchdog.isCompleted) throw e // closed by the watchdog: return the partial output
+            }
+        } finally {
+            watchdog.cancel()
+            runCatching { s.close() }
+        }
+        sb.toString()
     }
 
     /** Opens a channel to a Unix socket on the server. Blocking; call from an IO thread. */

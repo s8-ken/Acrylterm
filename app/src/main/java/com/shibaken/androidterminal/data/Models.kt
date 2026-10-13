@@ -21,8 +21,14 @@ data class HostProfile(
     val herdrEnabled: Boolean = true,
     /** Typed into the shell right after it starts. Empty = plain shell. */
     val startupCommand: String = "herdr",
-    /** Optional named herdr session (`herdr --session <name>`); empty = default session. */
-    val herdrSession: String = "",
+    /** Named herdr session for the phone (`HERDR_SESSION`); blank is treated as "android" in panes mode. */
+    val herdrSession: String = "android",
+    /** Show each pane over Mosh (UDP, survives network changes) when possible; falls back to SSH. */
+    val useMosh: Boolean = false,
+    /** Run Lua extension scripts in this host's sessions. */
+    val extEnabled: Boolean = false,
+    /** Also load scripts from the host's config directory (androidterminal under .config) on connect. */
+    val extLoadFromHost: Boolean = false,
     val fontSizeSp: Float = 12f,
     val lastConnectedAt: Long = 0L,
 ) {

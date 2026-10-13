@@ -50,9 +50,9 @@ import com.shibaken.androidterminal.herdr.HerdrController
 import com.shibaken.androidterminal.herdr.HerdrState
 import com.shibaken.androidterminal.herdr.PaneInfo
 
-/** Workspace → tab → pane tree with agent status; tap to focus (moves the herdr TUI too). */
+/** Workspace → tab → pane tree with agent status; tap to focus. [title] is the host / session name. */
 @Composable
-fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, onNavigated: () -> Unit) {
+fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String, showVersion: Boolean, onNavigated: () -> Unit) {
     var newWorkspace by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf<PaneInfo?>(null) }
     var closing by remember { mutableStateOf<PaneInfo?>(null) }
@@ -61,9 +61,9 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, onNavigated: (
     LazyColumn(contentPadding = PaddingValues(vertical = 12.dp)) {
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
-                Text("herdr", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val sub = buildString {
-                    if (state.version.isNotBlank()) append("v${state.version}  ")
+                    if (showVersion && state.version.isNotBlank()) append("v${state.version}  ")
                     append(
                         when (state.phase) {
                             HerdrState.Phase.READY -> "接続済み"

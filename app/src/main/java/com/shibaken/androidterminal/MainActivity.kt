@@ -16,6 +16,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.shibaken.androidterminal.ui.AppTheme
+import com.shibaken.androidterminal.ui.ExtScriptsScreen
 import com.shibaken.androidterminal.ui.HostEditScreen
 import com.shibaken.androidterminal.ui.HostListScreen
 import com.shibaken.androidterminal.ui.KeysScreen
@@ -62,6 +63,7 @@ class MainActivity : FragmentActivity() {
                             onEdit = { id -> nav.navigate("host/${id ?: "new"}") },
                             onKeys = { nav.navigate("keys") },
                             onTailscale = { nav.navigate("tailscale") },
+                            onExtScripts = { nav.navigate("ext") },
                         )
                     }
                     composable("host/{id}") { entry ->
@@ -72,6 +74,7 @@ class MainActivity : FragmentActivity() {
                         )
                     }
                     composable("keys") { KeysScreen(onBack = { nav.popBackStack() }) }
+                    composable("ext") { ExtScriptsScreen(onBack = { nav.popBackStack() }) }
                     composable("tailscale") { TailscaleScreen(onBack = { nav.popBackStack() }) }
                     composable("terminal/{sessionId}") { entry ->
                         TerminalScreen(

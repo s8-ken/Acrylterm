@@ -2,6 +2,7 @@ package com.shibaken.androidterminal.herdr
 
 import android.util.Log
 import com.shibaken.androidterminal.data.AppJson
+import com.shibaken.androidterminal.ssh.RemoteCommand
 import com.shibaken.androidterminal.ssh.SshConnection
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -10,16 +11,22 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -34,6 +41,8 @@ data class HerdrState(
     val workspaces: List<WorkspaceInfo> = emptyList(),
     val tabs: List<TabInfo> = emptyList(),
     val panes: List<PaneInfo> = emptyList(),
+    /** Per-tab geometry keyed by tab id. */
+    val layouts: Map<String, TabLayout> = emptyMap(),
     val focusedWorkspaceId: String? = null,
     val focusedTabId: String? = null,
     val focusedPaneId: String? = null,
@@ -43,6 +52,7 @@ data class HerdrState(
     val blockedCount: Int get() = panes.count { it.agentStatus == AgentStatus.BLOCKED }
     fun pane(id: String?): PaneInfo? = panes.firstOrNull { it.paneId == id }
     fun workspace(id: String?): WorkspaceInfo? = workspaces.firstOrNull { it.workspaceId == id }
+    fun layout(tabId: String?): TabLayout? = layouts[tabId]
 }
 
 /** Callback for agent status transitions worth telling the user about. */
@@ -65,6 +75,13 @@ class HerdrController(private val alerts: AgentAlertListener) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
     private val _state = MutableStateFlow(HerdrState())
     val state: StateFlow<HerdrState> = _state.asStateFlow()
+
+    // Action failures (not connection-phase errors) for a snackbar; `message` is still set too.
+    private val _errors = MutableSharedFlow<String>(extraBufferCapacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val errors: SharedFlow<String> = _errors.asSharedFlow()
+
+    /** Every agent status transition: (pane after the change, previous status). Called on the controller thread. */
+    @Volatile var onAgentTransition: ((PaneInfo, String) -> Unit)? = null
 
     private var loopJob: Job? = null
     @Volatile private var client: HerdrClient? = null
@@ -94,7 +111,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
             "\${HERDR_SOCKET_PATH:-$base/herdr.sock}"
         }
         val path = conn.exec("printf '%s' \"$expr\"")
-        if (!path.startsWith("/")) throw IOException("herdr のソケットパスを取得できませんでした: $path")
+        if (!path.startsWith("/")) throw IOException("ソケットパスを取得できませんでした: $path")
         return path
     }
 
@@ -103,7 +120,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
         var socketPath: String? = null
         while (scope.isActive) {
             try {
-                _state.update { it.copy(phase = HerdrState.Phase.CONNECTING, message = "herdr に接続中…") }
+                _state.update { it.copy(phase = HerdrState.Phase.CONNECTING, message = "接続中…") }
                 if (!conn.isConnected) throw IOException("SSH が切断されています")
                 val path = socketPath ?: resolveSocketPath(conn, herdrSession).also { socketPath = it }
                 val c = HerdrClient(conn, path)
@@ -113,13 +130,13 @@ class HerdrController(private val alerts: AgentAlertListener) {
                 backoff = 1_000L
                 _state.update { it.copy(version = version) }
                 runSession(c, version)
-                throw IOException("herdr のイベント購読が終了しました")
+                throw IOException("イベント購読が終了しました")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 client = null
                 val msg = when {
-                    e is HerdrException && e.code == "unreachable" -> "herdr が起動していません(起動を待っています)"
+                    e is HerdrException && e.code == "unreachable" -> "サーバーが起動していません(起動を待っています)"
                     else -> e.message ?: e.toString()
                 }
                 Log.w(TAG, "herdr loop: $msg", e)
@@ -132,17 +149,42 @@ class HerdrController(private val alerts: AgentAlertListener) {
     }
 
     private suspend fun runSession(c: HerdrClient, version: String) = coroutineScope {
-        val legacy = version.startsWith("0.8") || version.startsWith("0.7") || version.startsWith("0.6")
+        val legacy = !RemoteCommand.versionAtLeast(version, 0, 9) // 0.6-0.8 replay old events on subscribe
         val refresh = Channel<Unit>(Channel.CONFLATED)
-
-        // Lifecycle events: used only as invalidation signals.
-        val lifecycle = launch {
-            c.subscribe(LIFECYCLE_SUBSCRIPTIONS).collect { refresh.trySend(Unit) }
-            throw IOException("lifecycle subscription closed")
-        }
-
         var agentJob: Job? = null
         var subscribedPanes: Set<String>? = null
+
+        // Lifecycle events: used only as invalidation signals. A closed stream, an error line or
+        // `events_lost` means events may have been missed: resync (snapshot + both subscriptions),
+        // with exponential backoff so a persistently failing stream cannot spin.
+        val lifecycle = launch {
+            var backoff = RESYNC_MIN_MS
+            var rapidFailures = 0
+            while (true) {
+                val startedAt = System.currentTimeMillis()
+                try {
+                    c.subscribe(LIFECYCLE_SUBSCRIPTIONS).collect { ev ->
+                        if (isEventsLost(ev)) throw HerdrException("events_lost", "events_lost")
+                        refresh.trySend(Unit)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "lifecycle subscription ended: ${e.message}")
+                }
+                if (System.currentTimeMillis() - startedAt > RESYNC_STABLE_MS) {
+                    backoff = RESYNC_MIN_MS
+                    rapidFailures = 0
+                } else {
+                    if (++rapidFailures >= RESYNC_MAX_RAPID) throw IOException("イベント購読が繰り返し切断されました")
+                    backoff = (backoff * 2).coerceAtMost(RESYNC_MAX_MS)
+                }
+                delay(backoff)
+                agentJob?.cancel()
+                subscribedPanes = null
+                refresh.trySend(Unit)
+            }
+        }
 
         refresh.trySend(Unit)
         for (signal in refresh) {
@@ -157,6 +199,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
                         val startedAt = System.currentTimeMillis()
                         try {
                             c.subscribe(panes.map { agentSubscription(it) }).collect { ev ->
+                                if (isEventsLost(ev)) throw HerdrException("events_lost", "events_lost")
                                 // 0.8.x replays old events on subscribe; ignore the replay window.
                                 if (legacy && System.currentTimeMillis() - startedAt < 1_500) return@collect
                                 onAgentEvent(ev)
@@ -166,7 +209,9 @@ class HerdrController(private val alerts: AgentAlertListener) {
                         } catch (e: Exception) {
                             Log.w(TAG, "agent subscription ended: ${e.message}")
                         }
-                        // A pane may have vanished between snapshot and subscribe: rebuild.
+                        // A pane may have vanished between snapshot and subscribe, or events were lost: rebuild
+                        // (delayed when the stream died quickly so a failing subscription cannot spin).
+                        if (System.currentTimeMillis() - startedAt < RESYNC_STABLE_MS) delay(RESYNC_MIN_MS * 2)
                         subscribedPanes = null
                         refresh.trySend(Unit)
                     }
@@ -177,6 +222,8 @@ class HerdrController(private val alerts: AgentAlertListener) {
         }
     }
 
+    private fun isEventsLost(ev: JsonObject): Boolean = HerdrClient.sameEvent(HerdrClient.eventName(ev), "events_lost")
+
     private fun applySnapshot(result: JsonObject) {
         val snapEl = result["snapshot"] ?: return
         val snap = AppJson.decodeFromJsonElement(SessionSnapshot.serializer(), snapEl)
@@ -186,15 +233,16 @@ class HerdrController(private val alerts: AgentAlertListener) {
                 workspaces = snap.workspaces.sortedBy { w -> w.number },
                 tabs = snap.tabs.sortedBy { t -> t.number },
                 panes = snap.panes,
-                focusedWorkspaceId = snap.focusedWorkspaceId,
-                focusedTabId = snap.focusedTabId,
-                focusedPaneId = snap.focusedPaneId,
+                layouts = snap.layouts.associateBy { l -> l.tabId },
+                focusedWorkspaceId = snap.resolvedFocusedWorkspaceId,
+                focusedTabId = snap.resolvedFocusedTabId,
+                focusedPaneId = snap.resolvedFocusedPaneId,
             )
         }
     }
 
     private fun onAgentEvent(ev: JsonObject) {
-        if (HerdrClient.eventName(ev) != "pane.agent_status_changed") return
+        if (!HerdrClient.sameEvent(HerdrClient.eventName(ev), "pane.agent_status_changed")) return
         val data = HerdrClient.eventData(ev) ?: return
         val e = runCatching { AppJson.decodeFromJsonElement(AgentStatusEvent.serializer(), data) }.getOrNull() ?: return
         val before = _state.value.pane(e.paneId) ?: return
@@ -206,6 +254,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
             stateLabels = e.stateLabels.ifEmpty { before.stateLabels },
         )
         _state.update { s -> s.copy(panes = s.panes.map { if (it.paneId == e.paneId) after else it }) }
+        onAgentTransition?.let { runCatching { it(after, before.agentStatus) } }
         if (e.agentStatus == AgentStatus.BLOCKED || e.agentStatus == AgentStatus.DONE) {
             alerts.onAgentStatus(after, _state.value.workspace(after.workspaceId), e.agentStatus)
         }
@@ -215,7 +264,8 @@ class HerdrController(private val alerts: AgentAlertListener) {
 
     private fun act(method: String, params: JsonObject, after: (JsonObject) -> Unit = {}) {
         val c = client ?: run {
-            _state.update { it.copy(message = "herdr に接続されていません") }
+            _state.update { it.copy(message = "接続されていません") }
+            _errors.tryEmit("操作に失敗しました: 接続されていません")
             return
         }
         scope.launch {
@@ -224,24 +274,37 @@ class HerdrController(private val alerts: AgentAlertListener) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(message = "${method}: ${e.message}") }
+                Log.w(TAG, "$method failed: ${e.message}", e)
+                _state.update { it.copy(message = "操作に失敗しました") }
+                _errors.tryEmit(failureText(e))
             }
         }
     }
 
     fun focusPane(paneId: String) = act("pane.focus", buildJsonObject { put("pane_id", paneId) })
     fun focusTab(tabId: String) = act("tab.focus", buildJsonObject { put("tab_id", tabId) })
+
+    /** Moves to the previous/next tab of the focused workspace (clamped, no wrap). */
+    fun focusTabRelative(delta: Int) {
+        val s = _state.value
+        val tabs = s.tabs.filter { it.workspaceId == s.focusedWorkspaceId }
+        val i = tabs.indexOfFirst { it.tabId == s.focusedTabId }
+        if (i < 0) return
+        val j = (i + delta).coerceIn(0, tabs.lastIndex)
+        if (j != i) focusTab(tabs[j].tabId)
+    }
+
     fun focusWorkspace(id: String) = act("workspace.focus", buildJsonObject { put("workspace_id", id) })
 
     /** direction: "right" (side by side) or "down" (stacked). */
-    fun split(direction: String) = act("pane.split", buildJsonObject {
-        _state.value.focusedPaneId?.let { put("target_pane_id", it) }
+    fun split(direction: String, paneId: String? = null) = act("pane.split", buildJsonObject {
+        (paneId ?: _state.value.focusedPaneId)?.let { put("target_pane_id", it) }
         put("direction", direction)
         put("focus", true)
     })
 
-    fun toggleZoom() = act("pane.zoom", buildJsonObject {
-        _state.value.focusedPaneId?.let { put("pane_id", it) }
+    fun toggleZoom(paneId: String? = null) = act("pane.zoom", buildJsonObject {
+        (paneId ?: _state.value.focusedPaneId)?.let { put("pane_id", it) }
         put("mode", "toggle")
     })
 
@@ -250,6 +313,15 @@ class HerdrController(private val alerts: AgentAlertListener) {
     })
 
     fun closePane(paneId: String) = act("pane.close", buildJsonObject { put("pane_id", paneId) })
+
+    fun closeTab(tabId: String) = act("tab.close", buildJsonObject { put("tab_id", tabId) })
+
+    /** Commits a divider drag. [path]: false = first child, true = second child, from the root split. */
+    fun setSplitRatio(tabId: String, path: List<Boolean>, ratio: Float) = act("layout.set_split_ratio", buildJsonObject {
+        put("tab_id", tabId)
+        put("path", JsonArray(path.map { JsonPrimitive(it) }))
+        put("ratio", ratio)
+    })
 
     fun newTab() = act("tab.create", buildJsonObject {
         _state.value.focusedWorkspaceId?.let { put("workspace_id", it) }
@@ -270,12 +342,80 @@ class HerdrController(private val alerts: AgentAlertListener) {
     fun sendText(paneId: String, text: String, pressEnter: Boolean) = act("pane.send_input", buildJsonObject {
         put("pane_id", paneId)
         put("text", text)
-        if (pressEnter) put("keys", kotlinx.serialization.json.JsonArray(listOf(kotlinx.serialization.json.JsonPrimitive("enter"))))
+        if (pressEnter) put("keys", JsonArray(listOf(JsonPrimitive("enter"))))
     })
+
+    /** Types [text] (if any) into a pane, then presses [keys] (herdr key names such as "enter", "esc"). */
+    fun sendInput(paneId: String, text: String?, keys: List<String>) = act("pane.send_input", buildJsonObject {
+        put("pane_id", paneId)
+        if (!text.isNullOrEmpty()) put("text", text)
+        if (keys.isNotEmpty()) put("keys", JsonArray(keys.map { JsonPrimitive(it) }))
+    })
+
+    /** Like [sendInput] but suspends for the result; emits the failure to [errors] and returns false on error. */
+    suspend fun sendInputChecked(paneId: String, text: String?, keys: List<String>): Boolean {
+        val c = client ?: run { _errors.tryEmit("操作に失敗しました: 接続されていません"); return false }
+        return try {
+            c.call("pane.send_input", buildJsonObject {
+                put("pane_id", paneId)
+                if (!text.isNullOrEmpty()) put("text", text)
+                if (keys.isNotEmpty()) put("keys", JsonArray(keys.map { JsonPrimitive(it) }))
+            })
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "pane.send_input failed: ${e.message}", e)
+            _errors.tryEmit(failureText(e))
+            false
+        }
+    }
+
+    private fun failureText(e: Exception): String {
+        val reason = e.message?.lineSequence()?.firstOrNull()?.take(60)?.takeIf { it.isNotBlank() }
+        return if (reason != null) "操作に失敗しました: $reason" else "操作に失敗しました"
+    }
+
+    private val lastScrollFix = HashMap<String, Long>()
+
+    /**
+     * herdr >= 0.9: if [paneId]'s herdr-side scrollback is scrolled up (snapshot offset > 0), jump to the
+     * bottom so text the user is typing is visible. Cheap: no call unless the snapshot says offset > 0,
+     * and at most one per pane per second (the local state is updated optimistically).
+     */
+    fun scrollToBottomIfScrolled(paneId: String) {
+        val s = _state.value
+        if (!RemoteCommand.versionAtLeast(s.version, 0, 9)) return
+        val offset = s.pane(paneId)?.scroll?.offsetFromBottom ?: 0
+        if (offset <= 0) return
+        val now = System.currentTimeMillis()
+        synchronized(lastScrollFix) {
+            if (now - (lastScrollFix[paneId] ?: 0L) < 1_000) return
+            lastScrollFix[paneId] = now
+        }
+        val c = client ?: return
+        scope.launch {
+            try {
+                c.call("pane.scroll", buildJsonObject {
+                    put("pane_id", paneId)
+                    put("offset_from_bottom", 0)
+                })
+                _state.update { st ->
+                    st.copy(panes = st.panes.map { p ->
+                        if (p.paneId == paneId) p.copy(scroll = p.scroll?.copy(offsetFromBottom = 0)) else p
+                    })
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "pane.scroll failed: ${e.message}")
+            }
+        }
+    }
 
     /** Reads the last lines of a pane (for previews). */
     suspend fun readPane(paneId: String, lines: Int = 40): String {
-        val c = client ?: throw IOException("herdr に接続されていません")
+        val c = client ?: throw IOException("接続されていません")
         val r = c.call("pane.read", buildJsonObject {
             put("pane_id", paneId)
             put("source", "recent")
@@ -284,8 +424,31 @@ class HerdrController(private val alerts: AgentAlertListener) {
         return r["read"]?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull ?: ""
     }
 
+    /** Current visible screen text of a pane (for overview miniatures); null on any failure. */
+    suspend fun readPaneVisible(paneId: String): String? {
+        val c = client ?: return null
+        return try {
+            val r = c.call("pane.read", buildJsonObject {
+                put("pane_id", paneId)
+                put("source", "visible")
+                put("format", "text")
+                put("strip_ansi", true)
+            }, 5_000)
+            r["read"]?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "pane.read failed: ${e.message}")
+            null
+        }
+    }
+
     companion object {
         private const val TAG = "HerdrController"
+        private const val RESYNC_MIN_MS = 500L
+        private const val RESYNC_MAX_MS = 8_000L
+        private const val RESYNC_STABLE_MS = 10_000L
+        private const val RESYNC_MAX_RAPID = 6
 
         private fun sub(type: String) = buildJsonObject { put("type", type) }
 

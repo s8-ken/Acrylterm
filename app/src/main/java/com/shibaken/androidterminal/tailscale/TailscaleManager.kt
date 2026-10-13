@@ -77,6 +77,8 @@ class TailscaleManager(private val context: Context) {
     private val _status = MutableStateFlow(TailscaleStatus())
     val status: StateFlow<TailscaleStatus> = _status.asStateFlow()
     private var pollJob: Job? = null
+    /** Last start() failure; kept across status refreshes, which would otherwise erase it. */
+    @Volatile private var startError: String? = null
 
     val enabled: Boolean get() = prefs.getBoolean("enabled", false)
 
@@ -101,12 +103,14 @@ class TailscaleManager(private val context: Context) {
             try {
                 startInternal(authKey)
             } catch (e: Exception) {
-                _status.value = _status.value.copy(error = e.message)
+                startError = e.message ?: e.toString()
+                _status.value = _status.value.copy(error = startError)
             }
         }
     }
 
     private fun startInternal(authKey: String?) {
+        startError = null
         pushInterfaces()
         registerNetworkCallback()
         val dir = File(context.filesDir, "tailscale").apply { mkdirs() }
@@ -130,7 +134,8 @@ class TailscaleManager(private val context: Context) {
         if (!available) return
         try {
             val json = call("status") as String
-            _status.value = AppJson.decodeFromString(TailscaleStatus.serializer(), json)
+            val s = AppJson.decodeFromString(TailscaleStatus.serializer(), json)
+            _status.value = if (s.error == null && startError != null) s.copy(error = startError) else s
         } catch (e: Exception) {
             _status.value = _status.value.copy(error = e.message)
         }
@@ -144,6 +149,7 @@ class TailscaleManager(private val context: Context) {
             withTimeout(timeoutMs) {
                 while (true) {
                     refreshStatus()
+                    startError?.let { throw IOException("Tailscale の起動に失敗しました: $it") }
                     val s = _status.value
                     if (s.isConnected) return@withTimeout
                     if (s.needsLogin) throw IOException("Tailscale へのログインが必要です。Tailscale 画面からログインしてください。")

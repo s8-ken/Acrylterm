@@ -20,9 +20,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lan
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -34,6 +37,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +62,7 @@ fun HostListScreen(
     onEdit: (String?) -> Unit,
     onKeys: () -> Unit,
     onTailscale: () -> Unit,
+    onExtScripts: () -> Unit,
 ) {
     val app = LocalContext.current.applicationContext as App
     val hosts by app.hosts.hosts.collectAsState()
@@ -83,6 +90,13 @@ fun HostListScreen(
                         }
                     }
                     IconButton(onClick = onKeys) { Icon(Icons.Filled.Key, contentDescription = "SSH 鍵") }
+                    var more by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { more = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "メニュー") }
+                        DropdownMenu(more, { more = false }) {
+                            DropdownMenuItem(text = { Text("拡張スクリプト") }, onClick = { more = false; onExtScripts() })
+                        }
+                    }
                 },
             )
         },
@@ -135,7 +149,7 @@ private fun HostRow(h: HostProfile, onConnect: () -> Unit, onEdit: () -> Unit) {
                 Text(h.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val tags = buildList {
                     if (h.useTailscale) add("Tailscale")
-                    if (h.herdrEnabled) add("herdr")
+                    if (h.herdrEnabled) add("マルチタブ")
                 }.joinToString(" · ")
                 Text(
                     "${h.username}@${h.host}:${h.port}" + if (tags.isNotEmpty()) "  $tags" else "",

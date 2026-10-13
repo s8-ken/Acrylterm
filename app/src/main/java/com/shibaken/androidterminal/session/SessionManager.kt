@@ -27,6 +27,11 @@ class SessionManager(private val app: App) {
 
     /** Set by MainActivity: whether the UI is visible and which session it shows. */
     @Volatile var uiVisible: Boolean = false
+        set(value) {
+            field = value
+            // Detach pane channels while the UI is in the background, reattach on return.
+            _sessions.value.forEach { it.setForeground(value) }
+        }
     @Volatile var visibleSessionId: String? = null
 
     fun get(id: String?): SshTerminalSession? = _sessions.value.firstOrNull { it.id == id }
@@ -66,27 +71,40 @@ class SessionManager(private val app: App) {
             AgentStatus.BLOCKED -> "$who が入力を待っています" + (pane.stateLabels[status]?.let { "($it)" } ?: "")
             else -> "$who の作業が完了しました"
         }
+        post(session, text, where, pane.paneId, status == AgentStatus.BLOCKED)
+    }
+
+    /** General notification (used by extensions). Tapping it opens [session] (and [paneId] if given). */
+    fun notify(session: SshTerminalSession, title: String, body: String, paneId: String?) {
+        if (ContextCompat.checkSelfPermission(app, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+        post(session, title, body, paneId, false)
+    }
+
+    private fun post(session: SshTerminalSession, title: String, body: String, paneId: String?, high: Boolean) {
+        val key = (session.id + (paneId ?: "")).hashCode()
         val intent = Intent(app, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(MainActivity.EXTRA_SESSION_ID, session.id)
-            putExtra(MainActivity.EXTRA_PANE_ID, pane.paneId)
+            paneId?.let { putExtra(MainActivity.EXTRA_PANE_ID, it) }
         }
-        val pi = PendingIntent.getActivity(
-            app, (session.id + pane.paneId).hashCode(), intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
+        val pi = PendingIntent.getActivity(app, key, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val n = NotificationCompat.Builder(app, App.CHANNEL_AGENT)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(text)
-            .setContentText(where)
+            .setContentTitle(title)
+            .setContentText(body)
             .setContentIntent(pi)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setPriority(if (status == AgentStatus.BLOCKED) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(if (high) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
             .build()
         try {
-            NotificationManagerCompat.from(app).notify((session.id + pane.paneId).hashCode(), n)
+            NotificationManagerCompat.from(app).notify(key, n)
         } catch (_: SecurityException) {
         }
+    }
+
+    /** Re-evaluates the scripts of every live session that has extensions on (after a global script was saved). */
+    fun reloadExtensions() {
+        _sessions.value.forEach { it.reloadExtensions() }
     }
 }

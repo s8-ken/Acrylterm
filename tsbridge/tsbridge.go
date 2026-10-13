@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,10 +26,14 @@ import (
 )
 
 var (
-	mu       sync.Mutex
-	srv      *tsnet.Server
+	mu     sync.Mutex
+	srv    *tsnet.Server
+	logBuf = newRing(200)
+
+	// ifaceMu is separate from mu: tsnet.Server.Start (called with mu held) invokes
+	// getInterfaces via netmon, so sharing mu would deadlock.
+	ifaceMu  sync.Mutex
 	ifaceDef string // interface list pushed from Kotlin (Android denies net.Interfaces to apps)
-	logBuf   = newRing(200)
 )
 
 func init() {
@@ -39,15 +44,15 @@ func init() {
 // One interface per line: name|index|mtu|flags|addr/prefix,addr/prefix
 // flags is a bitmask: 1=up 2=broadcast 4=loopback 8=pointtopoint 16=multicast
 func SetInterfaces(def string) {
-	mu.Lock()
+	ifaceMu.Lock()
 	ifaceDef = def
-	mu.Unlock()
+	ifaceMu.Unlock()
 }
 
 func getInterfaces() ([]netmon.Interface, error) {
-	mu.Lock()
+	ifaceMu.Lock()
 	def := ifaceDef
-	mu.Unlock()
+	ifaceMu.Unlock()
 	var out []netmon.Interface
 	for _, line := range strings.Split(def, "\n") {
 		line = strings.TrimSpace(line)
@@ -118,6 +123,11 @@ func Start(stateDir, hostname, authKey string) error {
 	defer mu.Unlock()
 	if srv != nil {
 		return nil
+	}
+	// ipnlocal asks logpolicy.LogsDir for a directory; none of its fallbacks (HOME,
+	// cwd, TMPDIR) are usable in an Android app, and it panics without this.
+	if err := os.Setenv("TS_LOGS_DIR", stateDir); err != nil {
+		return err
 	}
 	s := &tsnet.Server{
 		Dir:       stateDir,

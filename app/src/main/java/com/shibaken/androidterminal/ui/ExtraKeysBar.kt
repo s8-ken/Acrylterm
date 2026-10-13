@@ -2,10 +2,12 @@ package com.shibaken.androidterminal.ui
 
 import android.view.KeyEvent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +24,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,7 +36,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Keys that soft keyboards lack. Ctrl/Alt are sticky: tap once and they apply to the next key.
- * "^B" sends herdr's prefix (Ctrl+b).
+ * "^B" (legacy TUI mode only, [showPrefixKey]) sends the multiplexer prefix (Ctrl+b).
  */
 @Composable
 fun ExtraKeysBar(
@@ -41,43 +46,56 @@ fun ExtraKeysBar(
     onCtrl: () -> Unit,
     onAlt: () -> Unit,
     onKeyboard: () -> Unit,
+    showPrefixKey: Boolean = true,
+    extKeys: List<String> = emptyList(),
+    onExtKey: (Int) -> Unit = {},
 ) {
+    Column {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Row(
         Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 4.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Key("ESC") { view.sendKey(KeyEvent.KEYCODE_ESCAPE) }
-        Key("TAB") { view.sendKey(KeyEvent.KEYCODE_TAB) }
-        Key("CTRL", active = ctrlOn, onTap = onCtrl)
-        Key("ALT", active = altOn, onTap = onAlt)
-        Key("^B", accent = true) { view.session?.sendText("\u0002") }
-        RepeatKey("←") { view.sendKey(KeyEvent.KEYCODE_DPAD_LEFT) }
-        RepeatKey("↓") { view.sendKey(KeyEvent.KEYCODE_DPAD_DOWN) }
-        RepeatKey("↑") { view.sendKey(KeyEvent.KEYCODE_DPAD_UP) }
-        RepeatKey("→") { view.sendKey(KeyEvent.KEYCODE_DPAD_RIGHT) }
-        Key("|") { view.session?.sendText("|") }
-        Key("/") { view.session?.sendText("/") }
-        Key("-") { view.session?.sendText("-") }
-        Key("~") { view.session?.sendText("~") }
-        Key("HOME") { view.sendKey(KeyEvent.KEYCODE_MOVE_HOME) }
-        Key("END") { view.sendKey(KeyEvent.KEYCODE_MOVE_END) }
-        Key("PGUP") { view.sendKey(KeyEvent.KEYCODE_PAGE_UP) }
-        Key("PGDN") { view.sendKey(KeyEvent.KEYCODE_PAGE_DOWN) }
-        Key("⌨", onTap = onKeyboard)
+        // Pinned: always reachable even when the key row is scrolled.
+        Key("⌨", desc = "キーボードの表示/非表示", onTap = onKeyboard)
+        Row(
+            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Key("ESC") { view.sendKey(KeyEvent.KEYCODE_ESCAPE) }
+            Key("TAB") { view.sendKey(KeyEvent.KEYCODE_TAB) }
+            Key("CTRL", active = ctrlOn, onTap = onCtrl)
+            Key("ALT", active = altOn, onTap = onAlt)
+            if (showPrefixKey) Key("^B", accent = true, desc = "プレフィックス Ctrl+B") { view.session?.sendText("\u0002") }
+            RepeatKey("←", "左矢印") { view.sendKey(KeyEvent.KEYCODE_DPAD_LEFT) }
+            RepeatKey("↓", "下矢印") { view.sendKey(KeyEvent.KEYCODE_DPAD_DOWN) }
+            RepeatKey("↑", "上矢印") { view.sendKey(KeyEvent.KEYCODE_DPAD_UP) }
+            RepeatKey("→", "右矢印") { view.sendKey(KeyEvent.KEYCODE_DPAD_RIGHT) }
+            Key("|", desc = "縦線") { view.session?.sendText("|") }
+            Key("/", desc = "スラッシュ") { view.session?.sendText("/") }
+            Key("-", desc = "ハイフン") { view.session?.sendText("-") }
+            Key("~", desc = "チルダ") { view.session?.sendText("~") }
+            Key("HOME") { view.sendKey(KeyEvent.KEYCODE_MOVE_HOME) }
+            Key("END") { view.sendKey(KeyEvent.KEYCODE_MOVE_END) }
+            Key("PGUP") { view.sendKey(KeyEvent.KEYCODE_PAGE_UP) }
+            Key("PGDN") { view.sendKey(KeyEvent.KEYCODE_PAGE_DOWN) }
+            extKeys.forEachIndexed { i, label -> Key(label, accent = true) { onExtKey(i) } }
+        }
+    }
     }
 }
 
 @Composable
-private fun KeyBox(label: String, active: Boolean, accent: Boolean, modifier: Modifier) {
+private fun KeyBox(label: String, desc: String?, active: Boolean, accent: Boolean, modifier: Modifier) {
     val bg = when {
         active -> MaterialTheme.colorScheme.primary
-        accent -> MaterialTheme.colorScheme.surfaceVariant
-        else -> MaterialTheme.colorScheme.surfaceContainerHigh
+        accent -> MaterialTheme.colorScheme.surfaceContainerHighest
+        else -> MaterialTheme.colorScheme.surfaceContainerHighest
     }
     val fg = when {
         active -> MaterialTheme.colorScheme.onPrimary
@@ -86,28 +104,34 @@ private fun KeyBox(label: String, active: Boolean, accent: Boolean, modifier: Mo
     }
     Box(
         modifier
-            .height(36.dp)
-            .widthIn(min = 40.dp)
+            .semantics { desc?.let { contentDescription = it } }
+            .height(44.dp)
+            .widthIn(min = 44.dp)
             .clip(RoundedCornerShape(6.dp))
             .background(bg)
+            .border(
+                1.dp,
+                if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                RoundedCornerShape(6.dp),
+            )
             .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = fg, fontFamily = FontFamily.Monospace, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Text(label, color = fg, fontFamily = FontFamily.Monospace, fontSize = 15.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
     }
 }
 
 @Composable
-private fun Key(label: String, active: Boolean = false, accent: Boolean = false, onTap: () -> Unit) {
-    KeyBox(label, active, accent, Modifier.pointerInput(onTap) { detectTapGestures(onTap = { onTap() }) })
+private fun Key(label: String, active: Boolean = false, accent: Boolean = false, desc: String? = null, onTap: () -> Unit) {
+    KeyBox(label, desc, active, accent, Modifier.pointerInput(onTap) { detectTapGestures(onTap = { onTap() }) })
 }
 
 /** Repeats while held (arrows). */
 @Composable
-private fun RepeatKey(label: String, onFire: () -> Unit) {
+private fun RepeatKey(label: String, desc: String, onFire: () -> Unit) {
     val scope = rememberCoroutineScope()
     KeyBox(
-        label, false, false,
+        label, desc, false, false,
         Modifier.pointerInput(onFire) {
             detectTapGestures(onPress = {
                 onFire()

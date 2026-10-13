@@ -50,6 +50,38 @@ Android アプリ
 - 0.9 系では、API からフォーカスを変えると、接続中のすべての TUI クライアントの表示も切り替わる
   - ドロワーでタップすると、ターミナル上の herdr の表示も切り替わるのはこのため
 
+## 画面構成(PANES モード)
+
+- `TerminalScreen` は、PANES モードではペイン表示を `ui/PaneLayout.kt` に任せる。SHELL / LEGACY_TUI は従来どおり単一の `TerminalCanvasView`
+  - 上から: 上部バー(戻る・ホスト名・メニュー)/ ペイン領域 / タブバー(☰・タブ・一覧・作成欄・+)/ 補助キー
+- `PaneLayout`: フォーカス中のタブの `TabLayout.normalizedPaneRects()` の比率で、ペインごとの `TerminalCanvasView` を並べる
+  - View は `PaneViewPool` がペイン ID ごとに 1 つ保持し、再コンポーズやタブ切替で作り直さない。文字サイズ・直接入力・Ctrl/Alt(`Modifiers`)は全ペイン共通
+  - 画面に出ているペイン ID を `setVisiblePanes` に渡し、出ているペインだけ attach する
+  - 1 ペインが 40 桁未満になる配置、ズーム中、レイアウト未取得のときは、フォーカス中のペインだけを全面表示する(`PaneLogic.needsSingleMode`)
+  - フォーカス中のペインの View だけが focusable で、IME と補助キーはそこへ向かう
+- ジェスチャーは `TerminalCanvasView` が判定し、コールバックで `PaneLayout` に渡す(`paneMode = true` のとき)
+  - タップ: フォーカス外のペインならフォーカス移動、フォーカス中ならマウス有効時にクリック送信
+  - ダブルタップ: 1 回目のタップはクリックとして即時に送り、2 回目だけをズーム切替にする
+  - 長押し: 放射状メニュー(`RadialMenu.kt`)。指は押したままで、View のタッチ列がそのままメニューの選択に使われる
+  - 2 本指の水平スワイプ: 前 / 次のタブ。ピンチとは「重心の水平移動量」と「指の間隔の変化」で区別する(`PaneGestureMath`)
+  - 区切り線: 24dp の透明なドラッグ領域。ドラッグ中はレイアウトを即時に更新し、指を離したときに `layout.set_split_ratio`(`tab_id` + 根からの `path`)で確定する。`path` は分割の矩形の包含関係から求める(`PaneLogic.splitPath`)
+- 入力待ちのペイン: ペイン下端に `QuickReplyBar`(`pane.read` の末尾 15 行から選択肢を推定。`QuickReplies.parse`)。状態が変わると消える
+- 作成欄: `ComposerSheet`(ボトムシート)。下書きはペインごとにメモリ上で保持し、送信は `pane.send_input`(テキスト + Enter)
+- 一覧: `PaneOverview`。全ワークスペースの全タブを、`TabLayout` の矩形を縮小したカードで表示する(エージェント状態を色と形で示す)
+- ユーザー向けの文言に「herdr」は出さない(通知・ドロワー・ホスト設定を含む)
+
+## 拡張(Lua)
+
+詳細は `docs/extensions.md`。ホスト設定の「拡張スクリプト」が on のセッションだけ有効(既定 off)。
+
+- `ext/`: LuaJ ランタイム(`ExtEngine`、専用 1 スレッドで直列化)、API(`ExtApi`)、登録内容(`ExtRegistry`)、`ScriptStore`(`filesDir/ext/`)、`OutputWatcher`(画面差分)、`ExtSync`(ホスト取り込み用コマンドの生成・パース)
+- `session/SessionExt.kt`: セッション 1 つにつき 1 つ。`ExtHost` をセッションに対して実装し(PANES は `HerdrController`、SHELL は単一ペイン `shell`)、接続のたびにスクリプトを再読込して `connected` を発火する
+- ホストのスクリプト(`extLoadFromHost`): 接続時に `sh -c` で `~/.config/androidterminal/*.lua` を 1 回の exec で取得して `filesDir/ext/hosts/<id>/` にキャッシュ。接続中は 3 秒ごとの `cksum` で変更検知→再取得→再読込。`.app/API.md`・`.app/log.txt` へ base64 経由で書き戻す(親ディレクトリが無ければ作らない)
+- 出力トリガー: トリガー登録があるときだけ各 `PaneTerminal.screenRevision`(200ms デバウンス)から表示行を読み、変化行を `OutputWatcher` → `ExtEngine.dispatchOutput`
+- エージェント状態: `HerdrController.onAgentTransition`(全遷移)→ `dispatchAgentStatus`。既存の通知(`AgentAlertListener`)とは独立
+- UI: `ExtraKeysBar` の末尾に `ExtRegistry.keys`、`QuickReplyBar` は `matchQuickReply` を優先、`TerminalScreen` のメニューに「拡張コマンド」「拡張を再読込」、ホスト一覧のメニューから `ExtScriptsScreen`(全体スクリプトの編集。保存で稼働中セッションを再読込)
+- 通知は `SessionManager.notify`(エージェント通知と同じチャンネル・タップでペインを開く)
+
 ## 既知の制限・今後
 
 - Mosh は未対応

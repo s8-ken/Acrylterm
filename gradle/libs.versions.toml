@@ -14,6 +14,7 @@ fragment = "1.8.5"
 sshj = "0.41.1"
 bouncycastle = "1.84"
 junit = "4.13.2"
+luaj = "3.0.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -36,6 +37,7 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 sshj = { group = "com.hierynomus", name = "sshj", version.ref = "sshj" }
 bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 bcpkix = { group = "org.bouncycastle", name = "bcpkix-jdk18on", version.ref = "bouncycastle" }
+luaj-jse = { group = "org.luaj", name = "luaj-jse", version.ref = "luaj" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]

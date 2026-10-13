@@ -4,11 +4,13 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import com.shibaken.androidterminal.data.HostRepository
+import com.shibaken.androidterminal.ext.ScriptStore
 import com.shibaken.androidterminal.data.KnownHostsRepository
 import com.shibaken.androidterminal.keys.KeyRepository
 import com.shibaken.androidterminal.session.SessionManager
 import com.shibaken.androidterminal.tailscale.TailscaleManager
 import org.bouncycastle.jce.provider.BouncyCastleProvider
+import java.io.File
 import java.security.Security
 
 class App : Application() {
@@ -23,6 +25,8 @@ class App : Application() {
         private set
     lateinit var tailscale: TailscaleManager
         private set
+    lateinit var scriptStore: ScriptStore
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -34,6 +38,7 @@ class App : Application() {
         knownHosts = KnownHostsRepository(this)
         keys = KeyRepository(this)
         tailscale = TailscaleManager(this)
+        scriptStore = ScriptStore(File(filesDir, "ext"))
         sessions = SessionManager(this)
     }
 
@@ -55,7 +60,7 @@ class App : Application() {
         )
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_AGENT, "エージェントの状態", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "herdr のエージェントが入力待ち(blocked)や完了になったときに通知します"
+                description = "エージェントが入力待ちや完了になったときに通知します"
             }
         )
     }

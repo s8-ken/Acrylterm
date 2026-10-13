@@ -386,3 +386,53 @@ Identical in 0.8.2 and 0.9.3, except that 0.9 adds `clear_pane` (unbound). Sourc
 6. **Split, zoom, and close** use `pane.split`, `pane.zoom`, and `pane.close`. Close needs a confirmation in the
    Android UI.
 7. **Gate 0.9-only methods on `version`,** and handle `invalid_request` gracefully.
+
+---
+
+## 8. Per-pane attach (verified on herdr 0.8.0, 2026-10-12)
+The app renders each pane natively by running `herdr terminal attach <terminal_id>` on its own SSH channel. Probe run
+on a separate session (`HERDR_SESSION=android-probe`):
+- **Separate session:** `HERDR_SESSION=<name> herdr server` runs a headless server. Sockets live in
+  `~/.config/herdr/sessions/<name>/herdr.sock` (API) and `herdr-client.sock`. `herdr server stop` (with the same env)
+  stops it. The binary is in `~/.local/bin`, which a non-login `exec` shell may not have on `PATH`: run commands
+  through `$SHELL -lc '…'`.
+- **IDs:** `workspace.create`, `pane.split`, `pane.get`, and `session.snapshot` panes all carry `terminal_id`
+  (e.g. `term_65da11c264b7c1`) plus `scroll{offset_from_bottom, max_offset_from_bottom, viewport_rows}`.
+- **Layout:** `session.snapshot` has `layouts[]`, one per tab: `{workspace_id, tab_id, zoomed, focused_pane_id,
+  area:Rect, panes:[{pane_id, focused, rect}], splits:[{id, direction, ratio, rect}]}`. Rects are in cells and include
+  the server-side chrome offset (e.g. `area.x = 26` for the headless sidebar), so normalise them against `area`.
+- **Attach output:** plain ANSI.
+  - On start, it enters the alternate screen (`?1049h`), turns off autowrap (`?7l`), and **always enables mouse
+    tracking** (`?1000h ?1002h ?1003h ?1015h ?1006h`).
+  - It then draws the full screen inside synchronized-update brackets (`?2026h … ?2026l`) with explicit cursor
+    positioning per cell. After that it sends diffs only.
+  - On exit, it restores all modes and leaves the alternate screen.
+- **Scrollback and mouse:** herdr owns the scrollback. Wheel events scroll it, and mouse events reach the pane's app
+  only when that app asked for the mouse.
+- **Keys:** `\x02 q` detaches cleanly (exit 0). A literal Ctrl+b must be sent as `\x02\x02`; a lone `\x02` is held
+  until the next key.
+- **Option order:** options must come after the terminal id: `herdr terminal attach <terminal_id> --takeover`.
+  `attach --takeover <id>` fails with exit 2 `unknown option: term_…`.
+- **Size:** the attached client's PTY size becomes the pane size (`attach_terminal_client` resizes the runtime). A
+  window-change on the SSH channel must therefore reach the attach process.
+- **Split ratio:** verified on 0.8.0 (session `ratio-probe`).
+  - `layout.set_split_ratio{tab_id, path, ratio}`: `path:[]` is the root split. Each `true` descends into the
+    **second** child (right/bottom); each `false` descends into the first. `ratio` is the first child's share.
+  - A path that does not exist returns `split_not_found`.
+  - Split `id`s in `layouts[].splits` are opaque strings (`split_0_root`, `split_1_1`), not paths. Derive the path
+    from rect containment.
+
+### 0.9.3 differences verified (2026-10-12)
+- `herdr status server` prints `status: running`, `version: 0.9.3`, `endpoint_compatible: yes`, `private_protocol: 22`;
+  the old `protocol:` line is gone. `herdr --version` prints `herdr 0.9.3`.
+- `ping` returns `protocol: 22` and `capabilities{live_handoff, detached_server_daemon, endpoint_protocol_generation,
+  surface_interest, health_check, ssh_agent_registration}`.
+- `session.snapshot` adds top-level `focused_workspace_id`, `focused_tab_id`, `focused_pane_id`. Headless layout `area`
+  starts at (0,0) (0.8 had an x=26 offset); normalising against `area` handles both.
+- Lifecycle events arrive with **underscore** names (`workspace_focused`, `tab_created`, `pane_focused`,
+  `layout_updated`), while `pane.agent_status_changed` still arrives **dotted**. Compare names after normalising
+  `.` and `_`. Subscriptions start at subscribe time (no replay), are batched, and may emit `events_lost` (resync).
+- `pane.scroll{pane_id, offset_from_bottom}` exists (0.9 only); `layout.set_split_ratio` paths are unchanged.
+- `terminal attach --takeover`: the initial frame is ~2.6 KB (much lighter than 0.8). On attach herdr enables mouse
+  (`?1000/1002/1003/1015/1006`), bracketed paste (`?2004h`), sync output (`?2026`) and the alt screen (`?1049h`).
+  `\x02\x02` still delivers a literal Ctrl-B; `\x02q` detaches.

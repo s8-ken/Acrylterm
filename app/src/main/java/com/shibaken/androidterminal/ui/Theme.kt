@@ -19,7 +19,9 @@ private val Scheme = darkColorScheme(
     onSurfaceVariant = Color(0xFF9DA7B3),
     surfaceContainer = Color(0xFF181C22),
     surfaceContainerHigh = Color(0xFF1F242B),
-    outline = Color(0xFF30363D),
+    surfaceContainerHighest = Color(0xFF2D333B),
+    outline = Color(0xFF768390),
+    outlineVariant = Color(0xFF444C56),
     error = Color(0xFFFF7B72),
 )
 

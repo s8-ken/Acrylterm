@@ -3,6 +3,19 @@ package com.shibaken.androidterminal.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,8 +36,6 @@ import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.VerticalSplit
-import androidx.compose.material.icons.filled.HorizontalSplit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
@@ -42,6 +53,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,10 +69,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.shibaken.androidterminal.App
 import com.shibaken.androidterminal.herdr.HerdrState
 import com.shibaken.androidterminal.session.ConnState
+import com.shibaken.androidterminal.session.SessionMode
+import com.shibaken.androidterminal.terminal.TerminalBackend
 import com.shibaken.androidterminal.terminal.Modifiers
 import com.shibaken.androidterminal.terminal.TerminalCanvasView
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalScreen(sessionId: String, onBack: () -> Unit) {
     val context = LocalContext.current
@@ -95,14 +111,53 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit) {
             onTextSizeChanged = { size -> app.hosts.get(session.profile.id)?.let { app.hosts.save(it.copy(fontSizeSp = size)) } }
         }
     }
-    DisposableEffect(view, session) {
-        view.session = session
+    val pool = remember(sessionId) {
+        PaneViewPool(context, modifiers, session.profile.fontSizeSp) { size ->
+            app.hosts.get(session.profile.id)?.let { app.hosts.save(it.copy(fontSizeSp = size)) }
+        }
+    }
+    DisposableEffect(pool) { onDispose { pool.clear() } }
+
+    // PANES mode: one view per pane of the focused tab (PaneLayout). SHELL / LEGACY_TUI: the single view.
+    val mode by session.mode.collectAsState()
+    val paneTerminals by session.panes.collectAsState()
+    val isPanes = mode == SessionMode.PANES && herdr != null
+    val focusedPaneId = herdrState.focusedPaneId
+    /** The view that receives extra keys and IME input. */
+    val activeView: TerminalCanvasView = if (isPanes && focusedPaneId != null) pool.get(focusedPaneId) else view
+    val pasteTarget: TerminalBackend? = if (isPanes) paneTerminals[focusedPaneId] else session.shell
+    val shell = session.shell // not observable: re-read on every recomposition like before
+    DisposableEffect(view, isPanes, shell) {
+        view.session = if (isPanes) null else shell
+        onDispose { view.session = null }
+    }
+    DisposableEffect(session) {
         app.sessions.visibleSessionId = session.id
         onDispose {
-            view.session = null
+            session.setVisiblePanes(emptySet())
             if (app.sessions.visibleSessionId == session.id) app.sessions.visibleSessionId = null
         }
     }
+    val extRt by session.ext.collectAsState()
+    val extRegistry = extRt?.engine?.registry?.collectAsState()?.value
+    var showExtCommands by remember { mutableStateOf(false) }
+    var showOverview by remember { mutableStateOf(false) }
+    var showComposer by remember { mutableStateOf(false) }
+
+    val snackbarHost = remember { SnackbarHostState() }
+    LaunchedEffect(herdr) {
+        herdr?.errors?.collect { msg ->
+            snackbarHost.currentSnackbarData?.dismiss()
+            snackbarHost.showSnackbar(msg, duration = SnackbarDuration.Short)
+        }
+    }
+    LaunchedEffect(session) {
+        session.notices.collect { msg ->
+            snackbarHost.currentSnackbarData?.dismiss()
+            snackbarHost.showSnackbar(msg, duration = SnackbarDuration.Short)
+        }
+    }
+    val imeVisible = WindowInsets.isImeVisible
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -114,36 +169,40 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit) {
         drawerContent = {
             if (herdr != null) {
                 ModalDrawerSheet {
-                    HerdrDrawerContent(herdrState, herdr, onNavigated = { scope.launch { drawerState.close() } })
+                    HerdrDrawerContent(herdrState, herdr, title = session.profile.displayName, showVersion = !isPanes, onNavigated = { scope.launch { drawerState.close() } })
                 }
             }
         },
     ) {
-        Column(
+        Box(
             Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .systemBarsPadding()
                 .imePadding()
         ) {
+        Column(Modifier.fillMaxSize()) {
             // --- top bar -----------------------------------------------------------------
             Row(
                 Modifier.fillMaxWidth().height(44.dp).background(MaterialTheme.colorScheme.surfaceContainer),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "ホスト一覧") }
-                if (herdr != null) {
-                    IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Filled.Menu, "herdr") }
+                if (herdr != null && !isPanes) {
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Filled.Menu, "ワークスペースを開く") }
                 }
                 Column(Modifier.weight(1f)) {
                     Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    val focused = herdrState.pane(herdrState.focusedPaneId)
-                    val sub = if (focused != null) {
-                        listOfNotNull(herdrState.workspace(focused.workspaceId)?.title, focused.title2).joinToString(" › ")
-                    } else session.profile.displayName
-                    Text(sub, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (!isPanes) {
+                        val focused = herdrState.pane(herdrState.focusedPaneId)
+                        val sub = if (focused != null) {
+                            listOfNotNull(herdrState.workspace(focused.workspaceId)?.title, focused.title2).joinToString(" › ")
+                        } else session.profile.displayName
+                        Text(sub, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
-                if (herdrState.blockedCount > 0) {
+                // PANES mode shows the waiting count as a badge on the tab strip's overview icon instead.
+                if (!isPanes && herdrState.blockedCount > 0) {
                     Row(
                         Modifier
                             .clip(RoundedCornerShape(12.dp))
@@ -162,11 +221,17 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit) {
                     DropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem(
                             text = { Text(if (directInput) "日本語入力を使う" else "直接入力(変換なし)にする") },
-                            onClick = { directInput = !directInput; view.directInput = directInput; menu = false },
+                            onClick = { directInput = !directInput; view.directInput = directInput; pool.directInput = directInput; menu = false },
                         )
-                        DropdownMenuItem(text = { Text("貼り付け") }, onClick = { session.pasteFromClipboard(); menu = false })
-                        DropdownMenuItem(text = { Text("文字を大きく") }, onClick = { view.textSizeSp += 1f; menu = false })
-                        DropdownMenuItem(text = { Text("文字を小さく") }, onClick = { view.textSizeSp -= 1f; menu = false })
+                        if (extRegistry != null && extRegistry.commands.isNotEmpty()) {
+                            DropdownMenuItem(text = { Text("拡張コマンド") }, onClick = { showExtCommands = true; menu = false })
+                        }
+                        if (session.profile.extEnabled) {
+                            DropdownMenuItem(text = { Text("拡張を再読込") }, onClick = { session.reloadExtensions(fetch = true); menu = false })
+                        }
+                        DropdownMenuItem(text = { Text("貼り付け") }, onClick = { pasteTarget?.pasteFromClipboard(); menu = false })
+                        DropdownMenuItem(text = { Text("文字を大きく") }, onClick = { activeView.textSizeSp += 1f; menu = false })
+                        DropdownMenuItem(text = { Text("文字を小さく") }, onClick = { activeView.textSizeSp -= 1f; menu = false })
                         if (state is ConnState.Disconnected) {
                             DropdownMenuItem(text = { Text("再接続") }, onClick = { session.connect(); menu = false })
                         } else {
@@ -203,33 +268,106 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit) {
             }
 
             // --- terminal -----------------------------------------------------------------
-            AndroidView(factory = { view }, modifier = Modifier.weight(1f).fillMaxWidth())
+            if (herdr != null && mode == SessionMode.PANES) {
+                PaneLayout(
+                    session = session, state = herdrState, herdr = herdr, pool = pool,
+                    onOpenComposer = { showComposer = true },
+                    inputEnabled = !showOverview && !drawerState.isOpen,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+            } else {
+                AndroidView(factory = { view }, modifier = Modifier.weight(1f).fillMaxWidth())
+            }
 
-            // --- herdr quick actions ------------------------------------------------------
+            // --- tab strip (+ quick actions in the legacy TUI mode) -----------------------
             if (herdr != null && herdrState.phase == HerdrState.Phase.READY) {
-                Row(
-                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                ) {
-                    IconButton(onClick = { herdr.split("right") }) { Icon(Icons.Filled.VerticalSplit, "左右に分割") }
-                    IconButton(onClick = { herdr.split("down") }) { Icon(Icons.Filled.HorizontalSplit, "上下に分割") }
-                    IconButton(onClick = { herdr.toggleZoom() }) { Icon(Icons.Filled.CenterFocusStrong, "ズーム") }
-                    TextButton(onClick = { herdr.focusDirection("left") }) { Text("◀") }
-                    TextButton(onClick = { herdr.focusDirection("right") }) { Text("▶") }
-                    IconButton(onClick = { confirmClosePane = true }) { Icon(Icons.Filled.Close, "ペインを閉じる") }
+                HerdrTabStrip(
+                    herdrState, herdr,
+                    onOpenDrawer = { scope.launch { drawerState.open() } },
+                    onOpenOverview = { showOverview = true },
+                    onOpenComposer = { showComposer = true },
+                )
+                // Legacy TUI mode only (native panes need none); hidden while the IME is up to leave rows for the terminal.
+                if (!isPanes && !imeVisible) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceContainer)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        IconButton(onClick = { herdr.focusDirection("left") }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "左のペインへ", tint = MaterialTheme.colorScheme.onSurface) }
+                        IconButton(onClick = { herdr.focusDirection("up") }) { Icon(Icons.Filled.KeyboardArrowUp, "上のペインへ", tint = MaterialTheme.colorScheme.onSurface) }
+                        IconButton(onClick = { herdr.focusDirection("down") }) { Icon(Icons.Filled.KeyboardArrowDown, "下のペインへ", tint = MaterialTheme.colorScheme.onSurface) }
+                        IconButton(onClick = { herdr.focusDirection("right") }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "右のペインへ", tint = MaterialTheme.colorScheme.onSurface) }
+                        IconButton(onClick = { herdr.toggleZoom() }) { Icon(Icons.Filled.CenterFocusStrong, "ズーム", tint = MaterialTheme.colorScheme.onSurface) }
+                        IconButton(onClick = { confirmClosePane = true }) { Icon(Icons.Filled.Close, "ペインを閉じる", tint = MaterialTheme.colorScheme.onSurface) }
+                    }
                 }
             }
 
             // --- extra keys ---------------------------------------------------------------
             // Reading modTick makes the bar recompose when the sticky modifiers change.
             ExtraKeysBar(
-                view = view,
+                view = activeView,
                 ctrlOn = modTick >= 0 && modifiers.ctrl,
                 altOn = modTick >= 0 && modifiers.alt,
                 onCtrl = { modifiers.ctrl = !modifiers.ctrl },
                 onAlt = { modifiers.alt = !modifiers.alt },
-                onKeyboard = { view.toggleKeyboard() },
+                onKeyboard = { activeView.toggleKeyboard() },
+                showPrefixKey = !isPanes,
+                extKeys = extRegistry?.keys?.map { it.label } ?: emptyList(),
+                onExtKey = { i -> extRt?.engine?.pressKey(i, if (isPanes) focusedPaneId else "shell") },
             )
+        }
+        if (showOverview && herdr != null) {
+            PaneOverview(herdrState, herdr, onDismiss = { showOverview = false }, modifier = Modifier.fillMaxSize())
+        }
+        SnackbarHost(snackbarHost, Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp))
+        }
+    }
+
+    if (showExtCommands && extRt != null) {
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { showExtCommands = false }) {
+            Column(Modifier.padding(bottom = 24.dp)) {
+                extRegistry?.commands?.forEach { c ->
+                    Text(
+                        c.name,
+                        Modifier.fillMaxWidth().clickable { extRt?.engine?.runCommand(c.name); showExtCommands = false }
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
+        }
+    }
+
+    if (showComposer && herdr != null) {
+        val pid = herdrState.focusedPaneId
+        if (pid == null) {
+            showComposer = false
+        } else {
+            key(pid) {
+                ComposerSheet(
+                    draftKey = "${session.id}/$pid",
+                    onSend = { t ->
+                        val bt = paneTerminals[pid]
+                        if (bt != null && bt.attached.value) {
+                            // paste() wraps in bracketed paste when the app enabled it and normalises newlines.
+                            bt.emulator.paste(t)
+                            delay(40) // keep the paste end and Enter in separate writes
+                            bt.sendText("\r")
+                            true
+                        } else {
+                            herdr.sendInputChecked(pid, t.replace("\r\n", "\r").replace('\n', '\r'), listOf("enter"))
+                        }
+                    },
+                    onDismiss = {
+                        showComposer = false
+                        activeView.post { activeView.requestFocus() }
+                    },
+                )
+            }
         }
     }
 
