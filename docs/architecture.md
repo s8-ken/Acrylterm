@@ -9,6 +9,7 @@ Android アプリ
  ├─ SshTerminalSession ── sshj SSHClient
  │     ├─ shell チャネル(PTY: xterm-256color)…… herdr の TUI がそのまま動く
  │     └─ direct-streamlocal チャネル × N …… ~/.config/herdr/herdr.sock(JSON API)
+ ├─ MoshChannel ───────── tsbridge.aar(mosh-go)…… ペインごとの mosh-server と UDP で通信(任意)
  ├─ HerdrController ──── session.snapshot / events.subscribe / pane.focus など
  └─ TailscaleManager ─── tsbridge.aar(Go tsnet、リフレクションで呼び出す)
                            Forward(): 127.0.0.1:port → tailnet 上の host:22
@@ -18,11 +19,11 @@ Android アプリ
 
 | パッケージ | 役割 |
 |---|---|
-| `data/` | ホストプロファイル・known_hosts(JSON ファイル + StateFlow) |
+| `data/` | ホストプロファイル・known_hosts(JSON ファイル + StateFlow)、アプリ設定、色プロファイル(`ColorProfiles`) |
 | `keys/` | 鍵の生成(BouncyCastle)・インポート(sshj)・Keystore AES-GCM による暗号化保存 |
-| `ssh/` | 接続・認証(鍵/パスワード/keyboard-interactive)・TOFU のホスト鍵検証・streamlocal チャネル |
+| `ssh/` | 接続・認証(鍵/パスワード/keyboard-interactive)・TOFU のホスト鍵検証・streamlocal チャネル・Mosh(`MoshBootstrap` / `MoshChannel` / `MoshBridge`) |
 | `session/` | `SshTerminalSession`(タブ 1 つ分)、`SessionManager`、UI への問い合わせ(`Prompter`) |
-| `terminal/` | 描画ビュー、`TerminalInputConnection`(IME の未確定文字列の処理) |
+| `terminal/` | 描画ビュー、`TerminalInputConnection`(IME の未確定文字列の処理)、テキスト選択、履歴スクロール、TUI の固定帯の検出 |
 | `herdr/` | ソケット API クライアント、状態のミラーと各種操作 |
 | `tailscale/` | tsbridge のラッパー(ネットワークインターフェース一覧を Go に渡す処理も含む) |
 | `service/` | バックグラウンドで接続を維持するフォアグラウンドサービス |
@@ -50,25 +51,45 @@ Android アプリ
 - 0.9 系では、API からフォーカスを変えると、接続中のすべての TUI クライアントの表示も切り替わる
   - ドロワーでタップすると、ターミナル上の herdr の表示も切り替わるのはこのため
 
+## Mosh
+
+- ホスト設定の「Mosh」(`HostProfile.useMosh`)で有効にする。PANES モードのときだけ使える
+- ペインごとに SSH の exec で `mosh-server new` を起動し(`MoshBootstrap`)、出力の `MOSH CONNECT <port> <key>` を読む
+- 以降の通信は `MoshChannel` が `MoshBridge` 経由で tsbridge の mosh クライアント(`tsbridge/mosh.go`、改造版 mosh-go を同梱)を使う。Tailscale 内蔵のときは tsnet 上の UDP を使う
+- `MoshChannel` は SSH 接続と独立しているので、SSH が切れて再接続する間もペインの表示は続く
+- tsbridge.aar が無い、または mosh-server の起動や通信に失敗したときは、そのペインを SSH で開き直してスナックバーで知らせる
+- 起動した mosh-server の PID は `MoshPids` に記録する。ペインを閉じたときに SSH 経由で終了させ、アプリが落ちて残ったものは次回の SSH 接続時に終了させる
+
 ## 画面構成(PANES モード)
 
 - `TerminalScreen` は、PANES モードではペイン表示を `ui/PaneLayout.kt` に任せる。SHELL / LEGACY_TUI は従来どおり単一の `TerminalCanvasView`
-  - 上から: 上部バー(戻る・ホスト名・メニュー)/ ペイン領域 / タブバー(☰・タブ・一覧・作成欄・+)/ 補助キー
+  - 上から: タブバー(`HerdrTabStrip`。戻る・タブ・一覧・+・⋮ メニュー)/ ペイン領域 / 補助キー(`ExtraKeysBar`)/ 「返信を作成」(作成欄を開く)
 - `PaneLayout`: フォーカス中のタブの `TabLayout.normalizedPaneRects()` の比率で、ペインごとの `TerminalCanvasView` を並べる
   - View は `PaneViewPool` がペイン ID ごとに 1 つ保持し、再コンポーズやタブ切替で作り直さない。文字サイズ・直接入力・Ctrl/Alt(`Modifiers`)は全ペイン共通
   - 画面に出ているペイン ID を `setVisiblePanes` に渡し、出ているペインだけ attach する
   - 1 ペインが 40 桁未満になる配置、ズーム中、レイアウト未取得のときは、フォーカス中のペインだけを全面表示する(`PaneLogic.needsSingleMode`)
+  - 全面表示のときに複数ペインのタブなら、1 本指の水平スワイプで隣のペインへ移り、下端にページの点を出す(ズーム中は除く)
   - フォーカス中のペインの View だけが focusable で、IME と補助キーはそこへ向かう
 - ジェスチャーは `TerminalCanvasView` が判定し、コールバックで `PaneLayout` に渡す(`paneMode = true` のとき)
   - タップ: フォーカス外のペインならフォーカス移動、フォーカス中ならマウス有効時にクリック送信
   - ダブルタップ: 1 回目のタップはクリックとして即時に送り、2 回目だけをズーム切替にする
-  - 長押し: 放射状メニュー(`RadialMenu.kt`)。指は押したままで、View のタッチ列がそのままメニューの選択に使われる
+  - 長押し: アプリ側のテキスト選択を始める。指を離すと両端のハンドルで範囲を調整でき、浮動ツールバーから コピー / 貼り付け / すべて選択
   - 2 本指の水平スワイプ: 前 / 次のタブ。ピンチとは「重心の水平移動量」と「指の間隔の変化」で区別する(`PaneGestureMath`)
   - 区切り線: 24dp の透明なドラッグ領域。ドラッグ中はレイアウトを即時に更新し、指を離したときに `layout.set_split_ratio`(`tab_id` + 根からの `path`)で確定する。`path` は分割の矩形の包含関係から求める(`PaneLogic.splitPath`)
 - 入力待ちのペイン: ペイン下端に `QuickReplyBar`(`pane.read` の末尾 15 行から選択肢を推定。`QuickReplies.parse`)。状態が変わると消える
 - 作成欄: `ComposerPanel`(IME 直上に固定するインライン入力パネル。ボトムシートは使わない)。下書きはペインごとにメモリ上で保持し、送信は `pane.send_input`(テキスト + Enter)
 - 一覧: `PaneOverview`。全ワークスペースの全タブを、`TabLayout` の矩形を縮小したカードで表示する(エージェント状態を色と形で示す)
 - ユーザー向けの文言に「herdr」は出さない(通知・ドロワー・ホスト設定を含む)
+
+## スクロール
+
+- シェルのペイン: 上へスクロールすると、herdr からペインの履歴を取り寄せて画面の上につなげて表示する(`HistoryScroll` / `HistoryStitch`)。「最新へ」ボタンで戻る
+- TUI のペイン: 上下の固定帯(ヘッダーとフッター)を画面の変化やスクロール領域から検出し、スクロール中も固定する(`FixedBands`)
+
+## 外観
+
+- 色プロファイルは `ColorProfiles`(Cyan Veil / Violet / Frost / Ember / Solar)とカスタム。UI(`CyanVeil` オブジェクト)とターミナルの配色の両方に効く
+- 背景の透明度と壁紙のぼかしは設定画面(`AppearanceScreen`)で変える
 
 ## 拡張(Lua)
 
@@ -81,10 +102,9 @@ Android アプリ
 - エージェント状態: `HerdrController.onAgentTransition`(全遷移)→ `dispatchAgentStatus`。既存の通知(`AgentAlertListener`)とは独立
 - UI: `ExtraKeysBar` のミニキー列末尾に `ExtRegistry.keys` と `commands`(⚡ マクロ)と「＋」、`QuickReplyBar` は `matchQuickReply` を優先、`TerminalScreen` のメニューに「拡張一覧」「拡張を作る」「拡張の再読込」(マクロ = keys+commands はミニキー列の ⚡ チップ)、ホスト一覧のメニューから `ExtScriptsScreen`(全体スクリプトの編集。保存で稼働中セッションを再読込)
 - 通知は `SessionManager.notify`(エージェント通知と同じチャンネル・タップでペインを開く)
+- 同梱テンプレート: `assets/ext/templates/*.lua` を `ExtTemplates` が読む。オン/オフはアプリ全体の設定(`AppSettings.enabledTemplates`、既定は空)で、有効なものを `template:` 付きでユーザーのスクリプトより先に読み込む
 
 ## 既知の制限・今後
 
-- Mosh は未対応
-- テキスト選択とコピーは herdr 側の選択機能(長押し→ドラッグ、`copy_on_select`)を使う
-- アプリ側で独自にテキストを選択する機能はまだない
+- Mosh には tsbridge.aar(`./tsbridge/build.sh` で生成)と、ホスト側の `mosh-server` が必要
 - フォントは端末標準の等幅フォント。日本語はシステムのフォールバックで表示される
