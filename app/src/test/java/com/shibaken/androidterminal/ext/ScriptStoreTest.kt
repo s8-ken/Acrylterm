@@ -88,4 +88,22 @@ class ScriptStoreTest {
         s.writeGlobal("bar.lua", "changed")
         assertEquals(listOf("bar.lua", "foo.lua", "host:bar.lua"), s.loadOrder("h1", true).map { it.name })
     }
+
+    @Test fun disabledAndEntries() {
+        val s = ScriptStore(tmp.root)
+        s.writeGlobal("g.lua", "G")
+        s.writeGlobal("same.lua", "S")
+        s.replaceHost("h1", listOf(ExtScript("same.lua", "S"), ExtScript("a.lua", "A")))
+        assertEquals(listOf("g.lua", "same.lua", "host:a.lua"), s.loadOrder("h1", true).map { it.name })
+        assertEquals(listOf("same.lua", "host:a.lua"), s.loadOrder("h1", true, setOf("g.lua")).map { it.name })
+        assertEquals(listOf("g.lua", "same.lua"), s.loadOrder("h1", true, setOf("host:a.lua")).map { it.name })
+        val e = s.entries("h1", true)
+        assertEquals(listOf("g.lua", "same.lua", "host:a.lua", "host:same.lua"), e.map { it.loadName })
+        assertEquals(listOf(false, false, false, true), e.map { it.duplicateOfGlobal })
+        assertEquals(ScriptStore.Scope.HOST, e[2].scope)
+        assertEquals("a.lua", e[2].fileName)
+        assertEquals(listOf("g.lua", "same.lua"), s.entries("h1", false).map { it.loadName })
+        assertTrue(s.deleteHost("h1", "a.lua"))
+        assertEquals(listOf("same.lua"), s.listHost("h1"))
+    }
 }

@@ -75,8 +75,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.zIndex
+import com.shibaken.androidterminal.session.GenState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -181,6 +186,17 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     val extRegistry = extRt?.engine?.registry?.collectAsState()?.value
     var showExtCommands by remember { mutableStateOf(false) }
     var showExtGenerate by remember { mutableStateOf(false) }
+    var extGenerateName by remember { mutableStateOf("") }
+    var extGenerateRequest by remember { mutableStateOf("") }
+    var extGenerateAgent by remember { mutableStateOf("") }
+    var showExtRunning by remember { mutableStateOf(false) }
+    var showExtResult by remember { mutableStateOf(false) }
+    var extFlying by remember { mutableStateOf(false) }
+    var extFlightStart by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
+    var extBadgePos by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
+    var extOverlayOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val extReveal = extRt?.pendingResultReveal?.collectAsState()?.value ?: false
+    val extGenState = extRt?.genState?.collectAsState()?.value ?: GenState.Idle
     var showOverview by remember { mutableStateOf(false) }
     var showComposer by remember { mutableStateOf(false) }
 
@@ -266,8 +282,11 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                         if (extensionsEnabled && session.profile.extEnabled) {
                             DropdownMenuItem(text = { Text("拡張を再読込") }, onClick = { session.reloadExtensions(fetch = true); menu = false })
                         }
+                        if (extensionsEnabled && session.profile.extEnabled && extRt != null) {
+                            DropdownMenuItem(text = { Text("動作中の拡張") }, onClick = { showExtRunning = true; menu = false })
+                        }
                         if (extensionsEnabled && session.profile.extEnabled && session.profile.extLoadFromHost && extRt != null) {
-                            DropdownMenuItem(text = { Text("拡張を作成") }, onClick = { showExtGenerate = true; menu = false })
+                            DropdownMenuItem(text = { Text("拡張を作成") }, onClick = { extGenerateName = ""; extGenerateRequest = ""; extGenerateAgent = ""; showExtGenerate = true; menu = false })
                         }
                         DropdownMenuItem(text = { Text("貼り付け") }, onClick = { pasteTarget?.pasteFromClipboard(); menu = false })
                         DropdownMenuItem(text = { Text("文字を大きく") }, onClick = { activeView.textSizeSp += 1f; menu = false })
@@ -472,6 +491,37 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
             }
         }
         SnackbarHost(snackbarHost, Modifier.align(Alignment.BottomCenter).zIndex(3f).padding(bottom = 96.dp))
+        // Extension generation activity: bottom-right edge, above the extra-keys bar (and composer pill).
+        if (extensionsEnabled && !fullscreen && (extGenState !is GenState.Idle || extFlying)) {
+            Box(Modifier.align(Alignment.BottomEnd).zIndex(2f).padding(end = 12.dp, bottom = if (isPanes && !imeVisible) 120.dp else 64.dp)
+                .size(48.dp).onGloballyPositioned { extBadgePos = it.positionInWindow() }) {
+                if (!extFlying) ExtActivityBadge(extGenState, onClick = {
+                    if (extGenState is GenState.Running) {
+                        extGenerateName = extGenState.name; extGenerateRequest = extGenState.request; extGenerateAgent = extGenState.agentCommand
+                        showExtGenerate = true
+                    } else showExtResult = true
+                })
+            }
+        }
+        if (extFlying) {
+            val prog = remember { androidx.compose.animation.core.Animatable(0f) }
+            LaunchedEffect(Unit) {
+                prog.animateTo(1f, androidx.compose.animation.core.tween(450, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                extFlying = false
+            }
+            val end = extBadgePos
+            val start = extFlightStart ?: end?.let { androidx.compose.ui.geometry.Offset(it.x - 400f, it.y + 200f) }
+            if (start != null && end != null) {
+                ExtLaunchGlyph(Modifier.align(Alignment.TopStart).zIndex(5f).onGloballyPositioned { extOverlayOrigin = it.positionInWindow() }
+                    .graphicsLayer {
+                        val p = prog.value
+                        val o = extOverlayOrigin
+                        translationX = androidx.compose.ui.util.lerp(start.x - 24.dp.toPx(), end.x, p) - o.x
+                        translationY = androidx.compose.ui.util.lerp(start.y - 24.dp.toPx(), end.y, p) - o.y
+                        val sc = androidx.compose.ui.util.lerp(1.3f, 1f, p); scaleX = sc; scaleY = sc
+                    })
+            } else extFlying = false
+        }
         }
         }
     }
@@ -511,8 +561,34 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
 
     if (extensionsEnabled && showExtGenerate) {
         extRt?.let { rt ->
-            ExtGenerateSheet(ext = rt, hostId = session.profile.id, scriptStore = app.scriptStore, onDismiss = { showExtGenerate = false })
+            ExtGenerateSheet(ext = rt, hostId = session.profile.id, app = app, initialName = extGenerateName, initialRequest = extGenerateRequest,
+                initialAgent = extGenerateAgent,
+                onLaunched = { pos ->
+                    val scale = android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+                    if (scale > 0f) { extFlightStart = pos; extFlying = true }
+                },
+                onDismiss = { showExtGenerate = false })
         }
+    }
+    if (extensionsEnabled && showExtRunning) {
+        extRt?.let { rt ->
+            RunningExtensionsSheet(ext = rt, session = session, app = app, onDismiss = { showExtRunning = false })
+        }
+    }
+    LaunchedEffect(extReveal, extGenState) {
+        if (extReveal && (extGenState is GenState.Done || extGenState is GenState.Failed)) {
+            extRt?.consumeResultReveal(); showExtResult = true
+        }
+    }
+    if (extensionsEnabled && showExtResult && extGenState !is GenState.Running) {
+        ExtResultDialog(extGenState,
+            onClose = { showExtResult = false; extRt?.clearGenState() },
+            onEdit = { n -> showExtResult = false; extGenerateName = n; extGenerateRequest = ""; extGenerateAgent = ""; extRt?.clearGenState(); showExtGenerate = true },
+            onRetry = {
+                showExtResult = false
+                val f = extGenState as? GenState.Failed
+                extGenerateName = f?.name.orEmpty(); extGenerateRequest = f?.request.orEmpty(); extGenerateAgent = f?.agentCommand.orEmpty()
+                extRt?.clearGenState(); showExtGenerate = true })
     }
 
     if (showComposer && herdr != null) {

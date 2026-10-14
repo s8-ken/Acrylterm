@@ -8,6 +8,7 @@ import com.shibaken.androidterminal.ext.ExtEngine
 import com.shibaken.androidterminal.ext.ExtHost
 import com.shibaken.androidterminal.ext.ExtLoadResult
 import com.shibaken.androidterminal.ext.ExtPane
+import com.shibaken.androidterminal.ext.ExtSummary
 import com.shibaken.androidterminal.ext.ExtSync
 import com.shibaken.androidterminal.ext.OutputWatcher
 import com.shibaken.androidterminal.herdr.PaneInfo
@@ -17,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,9 +43,9 @@ import java.util.Locale
 
 sealed interface GenState {
     data object Idle : GenState
-    data class Running(val name: String) : GenState
-    data class Done(val name: String) : GenState
-    data class Failed(val name: String, val message: String) : GenState
+    data class Running(val name: String, val request: String = "", val agentCommand: String = "") : GenState
+    data class Done(val name: String, val summary: ExtSummary) : GenState
+    data class Failed(val name: String, val message: String, val request: String = "", val agentCommand: String = "") : GenState
 }
 
 /**
@@ -136,6 +138,17 @@ class SessionExt(
 
     // --- load / sync -----------------------------------------------------------------------
 
+    /** Latest saved profile (the session's own copy may be a stale snapshot). */
+    private val profile get() = app.hosts.get(session.profile.id) ?: session.profile
+
+    private val _loadErrors = MutableStateFlow<Map<String, String>>(emptyMap())
+    /** Load name -> first error line of the last reload (empty when everything loaded). */
+    val loadErrors: StateFlow<Map<String, String>> = _loadErrors.asStateFlow()
+
+    private val _loadRevision = MutableStateFlow(0)
+    /** Bumped after every reload so the UI can re-read the script listing. */
+    val loadRevision: StateFlow<Int> = _loadRevision.asStateFlow()
+
     private val reloadLock = Mutex()
     private var syncJob: Job? = null
     private var watchJob: Job? = null
@@ -144,7 +157,7 @@ class SessionExt(
     /** Start (or restart) everything that depends on a live connection. Called after each successful connect. */
     fun onConnected(c: SshConnection) {
         syncJob?.cancel()
-        val fromHost = session.profile.extLoadFromHost
+        val fromHost = profile.extLoadFromHost
         syncJob = scope.launch {
             syncErrorLogged = false
             var lastCk = ""
@@ -189,28 +202,34 @@ class SessionExt(
     fun reloadNow(fetch: Boolean) {
         scope.launch {
             val c = session.currentConn()?.takeIf { it.isConnected }
-            reload(c, fetch = fetch && session.profile.extLoadFromHost)
-            if (c != null && session.profile.extLoadFromHost) writeLog(c)
+            reload(c, fetch = fetch && profile.extLoadFromHost)
+            if (c != null && profile.extLoadFromHost) writeLog(c)
         }
     }
 
     private suspend fun reload(c: SshConnection?, fetch: Boolean) = reloadLock.withLock {
+        var fetched = false
         if (fetch && c != null) {
             try {
                 val nonce = ExtSync.newNonce()
                 val out = remote(c, ExtSync.fetchCommand(nonce))
                 val scripts = ExtSync.parseBundle(out, nonce)
-                withContext(Dispatchers.IO) { app.scriptStore.replaceHost(session.profile.id, scripts) }
+                withContext(Dispatchers.IO) { app.scriptStore.replaceHost(profile.id, scripts) }
+                fetched = true
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 logOnce("fetch", e)
             }
         }
+        pruneDisabled(fetched)
+        val p = profile
         val scripts = withContext(Dispatchers.IO) {
-            app.scriptStore.loadOrder(session.profile.id, session.profile.extLoadFromHost)
+            app.scriptStore.loadOrder(p.id, p.extLoadFromHost, p.extDisabled.toSet())
         }
         val r: ExtLoadResult = engine.reload(scripts)
+        _loadErrors.value = errorsByScript(scripts.map { it.name }, r.errors)
+        _loadRevision.value++
         if (r.ok) {
             appendLog("読み込み完了: ${scripts.size} 本")
         } else {
@@ -219,12 +238,72 @@ class SessionExt(
         }
     }
 
+    /** Drop disabled names that match no existing script (host names only after a fresh fetch), so they can't silently disable a future script. */
+    private suspend fun pruneDisabled(hostListingFresh: Boolean) {
+        val p = profile
+        if (p.extDisabled.isEmpty()) return
+        val known = withContext(Dispatchers.IO) { app.scriptStore.entries(p.id, p.extLoadFromHost).map { it.loadName }.toSet() }
+        val keep = p.extDisabled.filter { n ->
+            n in known || (n.startsWith("host:") && !(hostListingFresh && p.extLoadFromHost))
+        }
+        if (keep.size != p.extDisabled.size) app.hosts.get(p.id)?.let { app.hosts.save(it.copy(extDisabled = it.extDisabled.filter { n -> n in keep })) }
+    }
+
+    /** Turn this extension on/off for this host only, then re-evaluate (no fetch). */
+    fun setEnabled(loadName: String, enabled: Boolean) {
+        val latest = profile
+        val next = if (enabled) latest.extDisabled - loadName else (latest.extDisabled - loadName) + loadName
+        if (next != latest.extDisabled) app.hosts.save(latest.copy(extDisabled = next))
+        reloadNow(fetch = false)
+    }
+
+    /** Delete host script [fileName] on the PC (needs a connection), forget its disabled flag, and re-fetch. */
+    suspend fun deleteHostScript(fileName: String): Boolean = scope.async { doDeleteHostScript(fileName) }.await()
+
+    private suspend fun doDeleteHostScript(fileName: String): Boolean {
+        val c = session.currentConn()?.takeIf { it.isConnected } ?: return false
+        return try {
+            c.execAll(ExtSync.deleteCommand(fileName), 8_000)
+            val latest = profile
+            val key = "host:$fileName"
+            if (key in latest.extDisabled) app.hosts.save(latest.copy(extDisabled = latest.extDisabled - key))
+            withContext(Dispatchers.IO) { try { app.scriptStore.deleteHost(latest.id, fileName) } catch (e: IllegalArgumentException) { false } }
+            appendLog("削除: $fileName")
+            reload(c, fetch = latest.extLoadFromHost)
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logOnce("削除", e)
+            false
+        }
+    }
+
+    /** Delete a global script (affects every host) and reload all sessions. */
+    suspend fun deleteGlobalScript(fileName: String) = scope.async { doDeleteGlobalScript(fileName) }.await()
+
+    private suspend fun doDeleteGlobalScript(fileName: String) {
+        withContext(Dispatchers.IO) { app.scriptStore.deleteGlobal(fileName) }
+        val latest = profile
+        if (fileName in latest.extDisabled) app.hosts.save(latest.copy(extDisabled = latest.extDisabled - fileName))
+        app.sessions.reloadExtensions()
+    }
+
     private fun logOnce(what: String, e: Exception) {
         Log.w(TAG, "$what failed: ${e.message}")
         if (!syncErrorLogged) {
             syncErrorLogged = true
             appendLog("$what に失敗: ${e.message ?: e.javaClass.simpleName}")
         }
+    }
+
+    private fun errorsByScript(names: List<String>, errors: List<String>): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        for (e in errors) {
+            val n = names.filter { e.startsWith("$it:") }.maxByOrNull { it.length } ?: continue
+            if (n !in out) out[n] = e.removePrefix("$n:").trim().lineSequence().firstOrNull().orEmpty()
+        }
+        return out
     }
 
     private suspend fun remote(c: SshConnection, cmd: String): String = c.execAll(cmd, 8_000)
@@ -249,20 +328,33 @@ class SessionExt(
     private val _genState = MutableStateFlow<GenState>(GenState.Idle)
     val genState: StateFlow<GenState> = _genState.asStateFlow()
 
+    private val _pendingResultReveal = MutableStateFlow(false)
+    /** True when generation finished while the app was in the background; the terminal screen opens the result dialog once and calls [consumeResultReveal]. */
+    val pendingResultReveal: StateFlow<Boolean> = _pendingResultReveal.asStateFlow()
+    fun consumeResultReveal() { _pendingResultReveal.value = false }
+
+    /** Android notification for a finished generation, only while the app UI is not visible. */
+    private fun notifyGenFinished(title: String, body: String) {
+        if (app.sessions.uiVisible) return
+        _pendingResultReveal.value = true
+        app.sessions.notify(session, title, body, null)
+    }
+
     /** Resets a finished ([GenState.Done] / [GenState.Failed]) state to idle. */
     fun clearGenState() {
         if (_genState.value !is GenState.Running) _genState.value = GenState.Idle
     }
 
     /** Ask the host's AI CLI to write (or modify) host script [name]; survives leaving the screen. */
-    fun generate(name: String, request: String) {
+    fun generate(name: String, request: String, agentCommand: String) {
         if (_genState.value is GenState.Running) return
-        _genState.value = GenState.Running(name)
+        _genState.value = GenState.Running(name, request, agentCommand)
         scope.launch {
             appendLog("生成を開始: $name")
             fun fail(msg: String) {
                 appendLog("生成に失敗: $name ($msg)")
-                _genState.value = GenState.Failed(name, msg)
+                _genState.value = GenState.Failed(name, msg, request, agentCommand)
+                notifyGenFinished("拡張の作成に失敗しました", msg.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().ifBlank { name })
             }
             try {
                 val c = session.currentConn()?.takeIf { it.isConnected }
@@ -272,7 +364,7 @@ class SessionExt(
                 }
                 val prompt = ExtSync.generatePrompt(name, request, apiDoc, existing)
                 val nonce = ExtSync.newNonce()
-                val cmd = ExtSync.generateCommand(session.profile.extAgentCommand, prompt, nonce)
+                val cmd = ExtSync.generateCommand(agentCommand, prompt, nonce)
                 val out = c.execAll(com.shibaken.androidterminal.ssh.RemoteCommand.viaLoginShell(cmd), 300_000)
                 val r = ExtSync.parseGenerateOutput(out, nonce)
                 when {
@@ -284,8 +376,9 @@ class SessionExt(
                 for (w in ExtSync.writeScriptCommands(name, code)) c.execAll(w, 15_000)
                 reloadNow(fetch = true)
                 appendLog("生成完了: $name")
-                _genState.value = GenState.Done(name)
-                session.postNotice("拡張を作成しました: $name")
+                val summary = ExtSummary.parse(code)
+                _genState.value = GenState.Done(name, summary)
+                notifyGenFinished("拡張を作成しました", summary.summary ?: name)
             } catch (e: CancellationException) {
                 _genState.value = GenState.Idle
                 throw e

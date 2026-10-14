@@ -58,8 +58,12 @@ class ExtSyncTest {
         assertTrue(p.contains("k.lua") && p.contains("API-DOC") && p.contains("add a key"))
         assertTrue(p.contains("Output ONLY the complete Lua source code"))
         assertTrue(!p.contains("Modify this script"))
+        assertTrue(p.contains("--[[veildeck\nsummary:") && p.contains("\nusage:\n- "))
+        assertTrue(p.contains("same language as the user's request"))
+        assertTrue(!p.contains("Update the header too"))
         val m = ExtSync.generatePrompt("k.lua", "fix", "API-DOC", "log('old')")
         assertTrue(m.contains("Modify this script per the request") && m.contains("log('old')"))
+        assertTrue(m.contains("Update the header too"))
     }
 
     @Test fun generateCommand_wrapsAndEncodesPrompt() {
@@ -99,5 +103,17 @@ class ExtSyncTest {
         assertEquals("x = 1\n", ExtSync.extractLua("```\nx = 1\n```"))
         assertEquals("long = 1\nlong = 2\n", ExtSync.extractLua("```lua\na\n```\n```lua\nlong = 1\nlong = 2\n```"))
         assertEquals("", ExtSync.extractLua("  \n "))
+    }
+
+    @Test fun deleteCommand_wrapsAndValidates() {
+        val c = ExtSync.deleteCommand("a-1.lua")
+        assertTrue(c.startsWith("sh -c '"))
+        assertTrue(c.contains("rm -f"))
+        assertTrue(c.contains("/a-1.lua"))
+        for (bad in listOf("../a.lua", "a;b.lua", "x.txt", "")) {
+            var threw = false
+            try { ExtSync.deleteCommand(bad) } catch (_: IllegalArgumentException) { threw = true }
+            assertTrue(bad, threw)
+        }
     }
 }

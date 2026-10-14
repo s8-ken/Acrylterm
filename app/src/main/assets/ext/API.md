@@ -11,6 +11,17 @@ You (an AI coding agent) can customize the Veildeck Android app by writing Lua f
 
 Files are loaded in file-name order (after the user's in-app global scripts). Do not touch `.app/` except for reading.
 
+## Header comment (recommended)
+Begin each script with a header so the app can show what it does:
+```
+--[[veildeck
+summary: <one line: what it does>
+usage:
+- <how to use, one bullet per line>
+]]
+```
+Write it in the user's language and keep it updated when you change the script.
+
 ## Language
 Lua 5.2 (LuaJ). Available: base functions, `table`, `string`, `math`, `bit32`, and `os.time/os.clock/os.date`.
 NOT available: `io`, `require`/`package`, `dofile`/`loadfile`, `debug`, `coroutine`, `os.execute` and the rest of `os`. `load` accepts strings only.

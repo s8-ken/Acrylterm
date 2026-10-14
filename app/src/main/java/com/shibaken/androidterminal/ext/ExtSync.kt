@@ -24,6 +24,12 @@ object ExtSync {
     /** 変更検知用。一致なし/ディレクトリなしは空出力。 */
     val CKSUM: String = sh("cksum \"$DIR\"/*.lua 2>/dev/null; true")
 
+    /** `~/.config/androidterminal/<name>` を消す(無ければ成功扱い)。 */
+    fun deleteCommand(name: String): String {
+        require(ScriptStore.isValidName(name)) { "invalid script name: $name" }
+        return sh("rm -f \"$DIR/$name\"")
+    }
+
     /** ディレクトリが存在すれば 0、無ければ 1。 */
     val DIR_EXISTS: String = sh("[ -d \"$DIR\" ]")
 
@@ -92,6 +98,15 @@ object ExtSync {
         }
         appendLine("Request from the user:")
         appendLine(request.trim())
+        appendLine()
+        appendLine("The script MUST begin with a header comment block exactly in this form:")
+        appendLine("--[[veildeck")
+        appendLine("summary: <one line: what it does>")
+        appendLine("usage:")
+        appendLine("- <how to use, one bullet per line>")
+        appendLine("]]")
+        appendLine("Write the header in the same language as the user's request.")
+        if (existing != null) appendLine("Update the header too so it matches the modified script.")
         appendLine()
         append("Output ONLY the complete Lua source code. No explanations, no markdown fences. Do not create or modify any files.")
     }

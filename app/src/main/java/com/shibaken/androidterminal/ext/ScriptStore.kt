@@ -53,24 +53,43 @@ class ScriptStore(private val root: File) {
         hostDir(hostId).deleteRecursively()
     }
 
-    /**
-     * 読み込み順: 全体スクリプト(ファイル名順)→ホストのスクリプト(同)。
-     * 名前はエラー表示用で、全体は `foo.lua`、ホストは `host:foo.lua`。
-     * 全体に同名・同一内容のスクリプトがある場合(取り込み済み)、ホスト側は二重読み込みを避けて除く。
-     */
-    fun loadOrder(hostId: String?, includeHost: Boolean): List<ExtScript> {
-        val out = ArrayList<ExtScript>()
-        for (n in listGlobal()) readGlobal(n)?.let { out += ExtScript(n, it) }
+    enum class Scope { GLOBAL, HOST }
+
+    /** 一覧表示用。[loadName] は読み込み名(全体 `foo.lua` / ホスト `host:foo.lua`)、[duplicateOfGlobal] は全体と同一内容のホスト側コピー。 */
+    data class Entry(
+        val loadName: String,
+        val scope: Scope,
+        val fileName: String,
+        val source: String,
+        val duplicateOfGlobal: Boolean = false,
+    )
+
+    /** 全体(ファイル名順)→ホスト(同)の全一覧。重複コピーも [Entry.duplicateOfGlobal] 付きで含む。 */
+    fun entries(hostId: String?, includeHost: Boolean): List<Entry> {
+        val out = ArrayList<Entry>()
+        for (n in listGlobal()) readGlobal(n)?.let { out += Entry(n, Scope.GLOBAL, n, it) }
         if (includeHost && hostId != null) {
             val dir = hostDir(hostId)
             for (n in listNames(dir)) {
                 val src = read(File(dir, n)) ?: continue
-                if (readGlobal(n) == src) continue
-                out += ExtScript("host:$n", src)
+                out += Entry("host:$n", Scope.HOST, n, src, duplicateOfGlobal = readGlobal(n) == src)
             }
         }
         return out
     }
+
+    /**
+     * 読み込み順: 全体スクリプト(ファイル名順)→ホストのスクリプト(同)。
+     * 名前はエラー表示用で、全体は `foo.lua`、ホストは `host:foo.lua`。
+     * 全体に同名・同一内容のスクリプトがある場合(取り込み済み)、ホスト側は二重読み込みを避けて除く。
+     * [disabled] の読み込み名は除く。
+     */
+    fun loadOrder(hostId: String?, includeHost: Boolean, disabled: Set<String> = emptySet()): List<ExtScript> =
+        entries(hostId, includeHost)
+            .filter { !it.duplicateOfGlobal && it.loadName !in disabled }
+            .map { ExtScript(it.loadName, it.source) }
+
+    fun deleteHost(hostId: String, name: String): Boolean = File(hostDir(hostId), checkName(name)).delete()
 
     companion object {
         private val NAME = Regex("^[A-Za-z0-9_][A-Za-z0-9_.-]*\\.lua$")

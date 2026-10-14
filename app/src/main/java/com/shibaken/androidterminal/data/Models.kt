@@ -31,6 +31,8 @@ data class HostProfile(
     val extLoadFromHost: Boolean = false,
     /** Headless AI CLI on the host that writes extensions: gets the prompt on stdin, must print the result on stdout (e.g. `claude -p`, `codex exec -`). */
     val extAgentCommand: String = "claude -p",
+    /** Extensions switched off for this host only, by load name ("foo.lua" = global, "host:foo.lua" = host script). */
+    val extDisabled: List<String> = emptyList(),
     val fontSizeSp: Float = 12f,
     val lastConnectedAt: Long = 0L,
 ) {

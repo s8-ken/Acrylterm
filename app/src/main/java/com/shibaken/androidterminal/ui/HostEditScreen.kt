@@ -74,7 +74,6 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
     var herdrSession by remember { mutableStateOf(original.herdrSession) }
     var extEnabled by remember { mutableStateOf(original.extEnabled) }
     var extFromHost by remember { mutableStateOf(original.extLoadFromHost) }
-    var extAgent by remember { mutableStateOf(original.extAgentCommand) }
     var confirmDelete by remember { mutableStateOf(false) }
 
     val valid = host.isNotBlank() && user.isNotBlank() && (port.toIntOrNull() ?: 0) in 1..65535 &&
@@ -82,13 +81,12 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
 
     fun save() {
         app.hosts.save(
-            original.copy(
+            (app.hosts.get(original.id) ?: original).copy(
                 name = name.trim(), host = host.trim(), port = port.toInt(), username = user.trim(),
                 authMethod = auth, keyId = if (auth == AuthMethod.KEY) keyId else null,
                 useTailscale = useTs, herdrEnabled = herdr, useMosh = useMosh,
                 startupCommand = startup.trim(), herdrSession = herdrSession.trim(),
                 extEnabled = extEnabled, extLoadFromHost = extEnabled && extFromHost,
-                extAgentCommand = extAgent.trim().ifBlank { HostProfile().extAgentCommand },
             )
         )
         onDone()
@@ -179,10 +177,6 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
                     SwitchRow("このホストで有効にする", "補助キー・コマンド・クイック返信をカスタマイズ", extEnabled) { extEnabled = it }
                     SwitchRow("ホストのスクリプトを読み込む", "接続先の Lua を共通スクリプトに追加", extFromHost && extEnabled,
                         enabled = extEnabled) { extFromHost = it }
-                    OutlinedTextField(
-                        extAgent, { extAgent = it }, label = { Text("生成に使う AI コマンド") }, singleLine = true,
-                        enabled = extEnabled && extFromHost, modifier = Modifier.fillMaxWidth(),
-                    )
                 }
 
                 if (!herdr) {
