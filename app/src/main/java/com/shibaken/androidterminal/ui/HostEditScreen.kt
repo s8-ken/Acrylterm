@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.shibaken.androidterminal.App
 import com.shibaken.androidterminal.data.AuthMethod
 import com.shibaken.androidterminal.data.HostProfile
+import com.shibaken.androidterminal.ssh.RemoteCommand
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -169,7 +170,11 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
                         else "このビルドには Tailscale が組み込まれていません(端末側の VPN を使ってください)",
                         useTs, enabled = app.tailscale.available,
                     ) { useTs = it }
-                    SwitchRow("マルチタブ / マルチペイン", "タブと画面分割を使い、エージェントの入力待ちを通知します", herdr) { herdr = it }
+                    SwitchRow("マルチタブ / マルチペイン", "タブと画面分割を使い、エージェントの入力待ちを通知します", herdr) {
+                        herdr = it
+                        if (!it && RemoteCommand.invokesHerdr(startup)) startup = ""
+                        else if (it && startup.isBlank()) startup = "herdr"
+                    }
                     if (herdr) SwitchRow("Mosh", "ペインを Mosh で表示(回線が切り替わっても維持)。mosh-server が必要", useMosh) { useMosh = it }
                 }
                 if (extensionsAvailable) VeilCard(Modifier.fillMaxWidth()) {

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.foundation.layout.Arrangement
@@ -117,6 +118,7 @@ import com.shibaken.androidterminal.herdr.AgentStatus
 import com.shibaken.androidterminal.herdr.BulkCloseKind
 import com.shibaken.androidterminal.session.ConnState
 import com.shibaken.androidterminal.session.SessionMode
+import com.shibaken.androidterminal.ssh.RemoteCommand
 import com.shibaken.androidterminal.terminal.TerminalBackend
 import com.shibaken.androidterminal.terminal.Modifiers
 import com.shibaken.androidterminal.terminal.TerminalCanvasView
@@ -148,7 +150,9 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     val connectedHerdrSession by session.connectedHerdrSession.collectAsState()
     val sessionPicker by session.sessionPicker.collectAsState()
     var showSessionPicker by remember { mutableStateOf(false) }
-    val herdr = session.herdr
+    // herdr missing on the host: behave exactly like herdrEnabled=false (every `herdr != null` below hides the herdr UI).
+    val herdrMissing by session.herdrMissing.collectAsState()
+    val herdr = if (herdrMissing) null else session.herdr
     val rawHerdrState = herdr?.state?.collectAsState()?.value ?: HerdrState()
     val pendingCloses = herdr?.pendingTabCloses?.collectAsState()?.value.orEmpty()
     val herdrState = rawHerdrState.withPendingTabsHidden(pendingCloses)
@@ -235,6 +239,19 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
         herdr?.errors?.collect { msg ->
             snackbarHost.currentSnackbarData?.dismiss()
             snackbarHost.showSnackbar(msg, duration = SnackbarDuration.Short)
+        }
+    }
+    LaunchedEffect(session, herdrMissing) {
+        if (herdrMissing && !session.herdrMissingNoticeShown) {
+            session.herdrMissingNoticeShown = true
+            snackbarHost.currentSnackbarData?.dismiss()
+            val result = snackbarHost.showSnackbar("herdr が見つかりません", actionLabel = "オフにする", duration = SnackbarDuration.Long)
+            if (result == SnackbarResult.ActionPerformed) {
+                app.hosts.get(session.profile.id)?.let {
+                    app.hosts.save(it.copy(herdrEnabled = false,
+                        startupCommand = if (RemoteCommand.invokesHerdr(it.startupCommand)) "" else it.startupCommand))
+                }
+            }
         }
     }
     LaunchedEffect(session) {

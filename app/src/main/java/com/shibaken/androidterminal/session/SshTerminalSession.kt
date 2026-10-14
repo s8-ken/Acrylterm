@@ -189,6 +189,13 @@ class SshTerminalSession(
 
     val herdr: HerdrController? = if (profile.herdrEnabled) HerdrController(alerts) else null
 
+    private val _herdrMissing = MutableStateFlow(false)
+    /** True while the last connect found no herdr on the host (plain shell, herdr UI hidden). */
+    val herdrMissing: StateFlow<Boolean> = _herdrMissing.asStateFlow()
+
+    /** UI-side latch so the "herdr missing" notice appears once per session object, not per reconnect. */
+    var herdrMissingNoticeShown = false
+
     private val _mode = MutableStateFlow(if (profile.herdrEnabled) SessionMode.PANES else SessionMode.SHELL)
     /**
      * Starts as PANES when herdr is enabled and may switch to LEGACY_TUI during connect.
@@ -232,7 +239,7 @@ class SshTerminalSession(
         return t
     }
 
-    private suspend fun startShell(c: SshConnection, gen: Int, legacy: Boolean) {
+    private suspend fun startShell(c: SshConnection, gen: Int, legacy: Boolean, herdrMissing: Boolean = false) {
         val term = ensureShell()
         val ch = withContext(Dispatchers.IO) {
             c.openShell(term.cols, term.rows, term.cols * term.cellW, term.rows * term.cellH)
@@ -245,10 +252,11 @@ class SshTerminalSession(
         term.bind(ch)
         if (legacy) _mode.value = SessionMode.LEGACY_TUI
         _state.value = ConnState.Connected
-        if (profile.startupCommand.isNotBlank()) {
+        // herdr missing: a startup command that runs herdr would only print "command not found".
+        if (profile.startupCommand.isNotBlank() && !(herdrMissing && RemoteCommand.invokesHerdr(profile.startupCommand))) {
             term.send((legacyStartup() + "\r").toByteArray())
         }
-        herdr?.attach(c, effectiveHerdrSession, target?.socketPath)
+        if (!herdrMissing) herdr?.attach(c, effectiveHerdrSession, target?.socketPath)
     }
 
     /** In LEGACY_TUI the typed `herdr` must talk to the same session the controller watches. */
@@ -285,11 +293,35 @@ class SshTerminalSession(
             if (herdr != null) {
                 _state.value = ConnState.Connecting("マルチペインを準備中…")
                 val existingOnly = target != null || sessionPreferences.contains(selectionKey)
+                var missing = false
                 if (existingOnly) {
-                    target = resolveRunningHerdrSession(_selectedHerdrSession.value, { listHerdrSessions(c) }) { HerdrClient(c, it.socketPath).call("ping"); Unit }
+                    try {
+                        target = resolveRunningHerdrSession(_selectedHerdrSession.value, { listHerdrSessions(c) }) { HerdrClient(c, it.socketPath).call("ping"); Unit }
+                    } catch (e: CancellationException) { throw e }
+                    catch (e: Exception) {
+                        // herdr itself may be gone (e.g. uninstalled): fall back to a plain shell like a fresh host.
+                        if (!RemoteCommand.isHerdrMissing(c.exec(RemoteCommand.viaLoginShell("herdr --version")))) throw e
+                        missing = true
+                    }
                 }
-                if (existingOnly || ensureHerdrServer(c)) {
-                    if (gen != generation) return
+                val probe = when {
+                    missing -> HerdrProbe.MISSING
+                    existingOnly -> HerdrProbe.READY
+                    else -> ensureHerdrServer(c)
+                }
+                if (gen != generation) return
+                if (probe == HerdrProbe.MISSING) {
+                    Log.w(TAG, "herdr not installed on the host; starting a plain shell")
+                    _herdrMissing.value = true
+                    herdr.detach(resetState = true)
+                    closeAllSlots()
+                    _mode.value = SessionMode.SHELL
+                    startShell(c, gen, legacy = false, herdrMissing = true)
+                    if (gen == generation) afterConnected(c)
+                    return
+                }
+                _herdrMissing.value = false
+                if (probe == HerdrProbe.READY) {
                     _mode.value = SessionMode.PANES
                     _state.value = ConnState.Connected
                     panesReady = true
@@ -327,30 +359,36 @@ class SshTerminalSession(
 
     private val effectiveHerdrSession: String get() = _selectedHerdrSession.value
 
-    /** True when `herdr terminal attach` is supported and the (phone) session's server is running. */
-    private suspend fun ensureHerdrServer(c: SshConnection): Boolean {
+    private enum class HerdrProbe { READY, MISSING, UNAVAILABLE }
+
+    /** READY when `herdr terminal attach` is supported and the (phone) session's server is running. */
+    private suspend fun ensureHerdrServer(c: SshConnection): HerdrProbe {
         try {
             val version = c.exec(RemoteCommand.viaLoginShell("herdr --version"))
+            if (RemoteCommand.isHerdrMissing(version)) {
+                Log.i(TAG, "herdr not found: '$version'")
+                return HerdrProbe.MISSING
+            }
             if (!RemoteCommand.supportsTerminalAttach(version)) {
-                Log.i(TAG, "herdr too old or missing: '$version'")
-                return false
+                Log.i(TAG, "herdr too old: '$version'")
+                return HerdrProbe.UNAVAILABLE
             }
             val env = RemoteCommand.herdrEnvironment(effectiveHerdrSession)
             suspend fun running() =
                 RemoteCommand.isServerRunning(c.exec(RemoteCommand.viaLoginShell("$env herdr status server")))
-            if (running()) return true
+            if (running()) return HerdrProbe.READY
             c.exec(RemoteCommand.viaLoginShell("$env nohup herdr server >/dev/null 2>&1 </dev/null &"))
             repeat(20) {
                 delay(500)
-                if (running()) return true
+                if (running()) return HerdrProbe.READY
             }
             Log.w(TAG, "herdr server did not come up")
-            return false
+            return HerdrProbe.UNAVAILABLE
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "ensureHerdrServer failed", e)
-            return false
+            return HerdrProbe.UNAVAILABLE
         }
     }
 

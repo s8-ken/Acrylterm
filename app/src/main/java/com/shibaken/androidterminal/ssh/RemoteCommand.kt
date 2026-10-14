@@ -33,6 +33,15 @@ object RemoteCommand {
         return Triple(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt())
     }
 
+    /** True when `herdr --version` output has no version (command not found prints nothing to stdout). */
+    fun isHerdrMissing(versionOutput: String): Boolean = parseVersion(versionOutput) == null
+
+    /** True when [command] starts by running herdr (`herdr`, `herdr -x`, `/usr/local/bin/herdr`). */
+    fun invokesHerdr(command: String): Boolean {
+        val first = command.trim().split(Regex("\\s+")).firstOrNull().orEmpty()
+        return first == "herdr" || first.endsWith("/herdr")
+    }
+
     /** True when `herdr terminal attach` is available (>= 0.7.2). */
     fun supportsTerminalAttach(versionText: String): Boolean {
         val (x, y, z) = parseVersion(versionText) ?: return false
