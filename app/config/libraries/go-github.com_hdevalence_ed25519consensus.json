@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:github.com/hdevalence/ed25519consensus",
+  "name": "github.com/hdevalence/ed25519consensus",
+  "artifactVersion": "v0.2.0",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/github.com/hdevalence/ed25519consensus",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-789be8b214"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

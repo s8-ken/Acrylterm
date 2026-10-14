@@ -38,7 +38,7 @@ import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppearanceScreen(onBack: () -> Unit) {
+fun AppearanceScreen(onBack: () -> Unit, onLicenses: () -> Unit) {
     val app = LocalContext.current.applicationContext as App
     val repository = app.appearance
     val appSettings by app.settings.settings.collectAsState()
@@ -119,6 +119,13 @@ fun AppearanceScreen(onBack: () -> Unit) {
                         SectionHeading("高度な機能", "")
                         SwitchRow("拡張機能 (Lua)", "補助キー・コマンド・マクロを Lua で追加", appSettings.extensionsEnabled) {
                             app.settings.setExtensionsEnabled(it)
+                        }
+                    }
+                    VeilCard(Modifier.fillMaxWidth().clickable(onClick = onLicenses)) {
+                        Row(Modifier.fillMaxWidth().heightIn(min = 32.dp), horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text("ライセンス", fontWeight = FontWeight.Medium)
+                            Text("›", fontSize = 20.sp, color = CyanVeil.Muted)
                         }
                     }
                 }

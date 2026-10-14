@@ -141,9 +141,22 @@ See [docs/extensions.md](docs/extensions.md) for details (Japanese) and [app/src
 - `bash scripts/verify.sh`: runs a debug build and writes the log to `.verify/build.log`
 - `./gradlew :app:testDebugUnitTest`: unit tests (`app/src/test/`)
 
+## License
+
+Acrylterm itself is licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attributions.
+
 ## Third-party licenses
 
-- `terminal-emulator/`: parts of Termux's terminal-emulator and terminal-view (Apache License 2.0). See [terminal-emulator/NOTICE](terminal-emulator/NOTICE)
-- `tsbridge/third_party/mosh-go/`: a modified mosh-go (MIT License). Changes are listed in [PATCHES.md](tsbridge/third_party/mosh-go/PATCHES.md)
-- Tailscale (`tsnet`, BSD 3-Clause License)
-- LuaJ (MIT License)
+The complete list and license texts are in the app under Settings > Licenses (generated from `app/config/`). Main components:
+
+- Termux (terminal-emulator / terminal-view, modified) and the original Terminal Emulator for Android: Apache License 2.0. See [terminal-emulator/NOTICE](terminal-emulator/NOTICE)
+- UDEV Gothic (bundled font): SIL Open Font License 1.1
+- sshj: Apache License 2.0
+- Bouncy Castle: Bouncy Castle Licence (MIT-style)
+- LuaJ, slf4j: MIT License
+- AndroidX, Jetpack Compose, Kotlin, kotlinx, AboutLibraries: Apache License 2.0
+- Tailscale (`tsnet`): BSD 3-Clause License
+- wireguard-go (Tailscale fork): MIT License
+- gVisor: Apache License 2.0
+- golang.org/x/*, Go standard library: BSD 3-Clause License
+- mosh-go (modified, `tsbridge/third_party/mosh-go/`): MIT License. Changes are listed in [PATCHES.md](tsbridge/third_party/mosh-go/PATCHES.md)

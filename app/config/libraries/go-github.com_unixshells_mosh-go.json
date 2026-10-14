@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:github.com/unixshells/mosh-go",
+  "name": "github.com/unixshells/mosh-go",
+  "artifactVersion": "v0.5.2",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/github.com/unixshells/mosh-go",
+  "developers": [],
+  "licenses": [
+    "go-mit-2930074308"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

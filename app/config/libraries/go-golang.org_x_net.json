@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:golang.org/x/net",
+  "name": "golang.org/x/net",
+  "artifactVersion": "v0.61.0",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/golang.org/x/net",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-9d7627991f"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

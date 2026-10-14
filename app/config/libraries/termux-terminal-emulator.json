@@ -1,0 +1,19 @@
+{
+  "uniqueId": "termux:terminal-emulator",
+  "name": "Termux terminal-emulator / terminal-view",
+  "artifactVersion": "termux-app 8629e63",
+  "description": "Terminal emulator core, modified by Acrylterm. Based on Terminal Emulator for Android by Jack Palevich.",
+  "website": "https://github.com/termux/termux-app",
+  "developers": [
+    {
+      "name": "Termux developers"
+    },
+    {
+      "name": "Jack Palevich"
+    }
+  ],
+  "licenses": [
+    "apache-2.0-full"
+  ],
+  "openSource": true
+}

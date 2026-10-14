@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:go-stdlib",
+  "name": "Go standard library",
+  "artifactVersion": "go1.27.1",
+  "description": "Go runtime and standard library (linked into tsbridge)",
+  "website": "https://go.dev",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-911f8f5782"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

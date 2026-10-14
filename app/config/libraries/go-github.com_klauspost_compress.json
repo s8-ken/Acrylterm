@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:github.com/klauspost/compress",
+  "name": "github.com/klauspost/compress",
+  "artifactVersion": "v1.20.0",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/github.com/klauspost/compress",
+  "developers": [],
+  "licenses": [
+    "go-apache-2.0-0d9e582ee4"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

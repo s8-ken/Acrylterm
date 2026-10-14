@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:github.com/creachadair/msync",
+  "name": "github.com/creachadair/msync",
+  "artifactVersion": "v0.10.1",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/github.com/creachadair/msync",
+  "developers": [],
+  "licenses": [
+    "go-bsd-2-clause-1d45f7789b"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

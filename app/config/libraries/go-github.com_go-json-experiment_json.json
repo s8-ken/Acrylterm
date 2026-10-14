@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:github.com/go-json-experiment/json",
+  "name": "github.com/go-json-experiment/json",
+  "artifactVersion": "v0.0.0-20260820222146-c27c302e5fc3",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/github.com/go-json-experiment/json",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-14a34c4db2"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

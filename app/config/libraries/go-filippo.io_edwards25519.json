@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:filippo.io/edwards25519",
+  "name": "filippo.io/edwards25519",
+  "artifactVersion": "v1.2.0",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/filippo.io/edwards25519",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-2d36597f71"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

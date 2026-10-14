@@ -139,9 +139,22 @@ Mac の場合の手順です。
 - `bash scripts/verify.sh`:デバッグビルドを実行し、ログを `.verify/build.log` に出力
 - `./gradlew :app:testDebugUnitTest`:ユニットテスト(`app/src/test/`)
 
+## ライセンス
+
+Acrylterm 本体は [Apache License 2.0](LICENSE) です。帰属表示は [NOTICE](NOTICE) を参照してください。
+
 ## サードパーティのライセンス
 
-- `terminal-emulator/`:Termux の terminal-emulator と terminal-view の一部(Apache License 2.0)。詳細は [terminal-emulator/NOTICE](terminal-emulator/NOTICE)
-- `tsbridge/third_party/mosh-go/`:mosh-go の改造版(MIT License)。変更点は [PATCHES.md](tsbridge/third_party/mosh-go/PATCHES.md)
-- Tailscale(`tsnet`、BSD 3-Clause License)
-- LuaJ(MIT License)
+完全な一覧とライセンス本文は、アプリの 設定 > ライセンス で確認できます(生成元は `app/config/`)。主なもの:
+
+- Termux(terminal-emulator / terminal-view、改変あり)と元の Terminal Emulator for Android:Apache License 2.0。詳細は [terminal-emulator/NOTICE](terminal-emulator/NOTICE)
+- UDEV Gothic(同梱フォント):SIL Open Font License 1.1
+- sshj:Apache License 2.0
+- Bouncy Castle:Bouncy Castle Licence(MIT 形式)
+- LuaJ、slf4j:MIT License
+- AndroidX、Jetpack Compose、Kotlin、kotlinx、AboutLibraries:Apache License 2.0
+- Tailscale(`tsnet`):BSD 3-Clause License
+- wireguard-go(Tailscale fork):MIT License
+- gVisor:Apache License 2.0
+- golang.org/x/*、Go 標準ライブラリ:BSD 3-Clause License
+- mosh-go(改造版、`tsbridge/third_party/mosh-go/`):MIT License。変更点は [PATCHES.md](tsbridge/third_party/mosh-go/PATCHES.md)

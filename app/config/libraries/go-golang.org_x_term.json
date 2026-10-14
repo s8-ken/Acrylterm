@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:golang.org/x/term",
+  "name": "golang.org/x/term",
+  "artifactVersion": "v0.47.0",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/golang.org/x/term",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-9d7627991f"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

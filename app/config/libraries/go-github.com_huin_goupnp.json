@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:github.com/huin/goupnp",
+  "name": "github.com/huin/goupnp",
+  "artifactVersion": "v1.3.0",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/github.com/huin/goupnp",
+  "developers": [],
+  "licenses": [
+    "go-bsd-2-clause-440688406a"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

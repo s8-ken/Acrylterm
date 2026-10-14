@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:go4.org/netipx",
+  "name": "go4.org/netipx",
+  "artifactVersion": "v0.0.0-20260823151212-3075585bcbeb",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/go4.org/netipx",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-1bfc4f32f4"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

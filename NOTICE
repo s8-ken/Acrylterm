@@ -1,0 +1,14 @@
+Acrylterm
+Copyright 2026 shibaken
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes software developed by third parties. The full list and
+license texts are in the app (Settings > Licenses) and in the sources
+(app/config/, terminal-emulator/NOTICE).
+
+The terminal-emulator module contains modified source code from Termux
+(https://github.com/termux/termux-app), whose terminal-emulator and terminal-view
+libraries are based on "Terminal Emulator for Android" by Jack Palevich
+(https://github.com/jackpal/Android-Terminal-Emulator). Both are licensed under the
+Apache License, Version 2.0. See terminal-emulator/NOTICE.

@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:github.com/mdlayher/socket",
+  "name": "github.com/mdlayher/socket",
+  "artifactVersion": "v0.7.0",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/github.com/mdlayher/socket",
+  "developers": [],
+  "licenses": [
+    "go-mit-7ac20f598f"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

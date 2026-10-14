@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:github.com/golang/groupcache",
+  "name": "github.com/golang/groupcache",
+  "artifactVersion": "v0.0.0-20241129210726-2c02b8208cf8",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/github.com/golang/groupcache",
+  "developers": [],
+  "licenses": [
+    "go-apache-2.0-73ba74dfaa"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

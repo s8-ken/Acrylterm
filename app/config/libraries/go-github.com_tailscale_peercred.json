@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:github.com/tailscale/peercred",
+  "name": "github.com/tailscale/peercred",
+  "artifactVersion": "v0.0.0-20250107143737-35a0c7bd7edc",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/github.com/tailscale/peercred",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-8e0db39410"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:golang.org/x/crypto",
+  "name": "golang.org/x/crypto",
+  "artifactVersion": "v0.58.0",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/golang.org/x/crypto",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-9d7627991f"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

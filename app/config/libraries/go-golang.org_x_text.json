@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:golang.org/x/text",
+  "name": "golang.org/x/text",
+  "artifactVersion": "v0.43.0",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/golang.org/x/text",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-9d7627991f"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

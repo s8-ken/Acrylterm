@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:golang.org/x/sys",
+  "name": "golang.org/x/sys",
+  "artifactVersion": "v0.49.0",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/golang.org/x/sys",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-9d7627991f"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

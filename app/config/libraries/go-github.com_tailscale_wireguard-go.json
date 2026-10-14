@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:github.com/tailscale/wireguard-go",
+  "name": "github.com/tailscale/wireguard-go",
+  "artifactVersion": "v0.0.0-20260928213032-417aef361226",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/github.com/tailscale/wireguard-go",
+  "developers": [],
+  "licenses": [
+    "go-mit-91276db973"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

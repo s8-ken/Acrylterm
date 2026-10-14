@@ -1,8 +1,22 @@
-This module contains source code from Termux (https://github.com/termux/termux-app):
-  - terminal-emulator/src/main/java/com/termux/terminal/*
-  - terminal-view/src/main/java/com/termux/view/TerminalRenderer.java
-Upstream commit: see UPSTREAM_COMMIT.
+This module contains source code from Termux (https://github.com/termux/termux-app),
+upstream commit: see UPSTREAM_COMMIT.
 
-Per the upstream LICENSE.md, the terminal-emulator and terminal-view libraries are based on
-"Terminal Emulator for Android" (https://github.com/jackpal/Android-Terminal-Emulator) and are
-released under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
+Origin of the files:
+  - terminal-emulator/src/main/java/com/termux/terminal/*
+      from termux-app: terminal-emulator/src/main/java/com/termux/terminal/
+  - terminal-emulator/src/main/java/com/termux/view/TerminalRenderer.java
+      from termux-app: terminal-view/src/main/java/com/termux/view/TerminalRenderer.java
+
+Upstream licensing: the termux-app repository as a whole is GPLv3, but per its LICENSE.md the
+terminal-emulator and terminal-view libraries are based on "Terminal Emulator for Android"
+(https://github.com/jackpal/Android-Terminal-Emulator) by Jack Palevich and are released under the
+Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0). Only these Apache-2.0
+library files are used here; no other Termux (GPLv3) code is included.
+Copyright of the original files belongs to the Termux developers and Jack Palevich.
+
+The full text of the Apache License, Version 2.0 is in the LICENSE file at the repository root.
+
+Changes made by Acrylterm (Copyright 2026 shibaken):
+  - Modified: TerminalEmulator.java, TerminalRenderer.java (compared with the upstream commit above).
+  - Added: AnsiRows.java (serializes screen rows back to ANSI text).
+  - Package layout: TerminalRenderer.java is placed in this module instead of terminal-view.

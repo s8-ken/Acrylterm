@@ -1,3 +1,4 @@
+// Modified by Acrylterm from the Termux original (Apache License 2.0); see terminal-emulator/NOTICE.
 package com.termux.view;
 
 import android.graphics.Bitmap;

@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:tailscale.com",
+  "name": "tailscale.com",
+  "artifactVersion": "v1.104.1",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/tailscale.com",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-48a96a6d0c"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

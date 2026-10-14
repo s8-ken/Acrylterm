@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:github.com/gaissmai/bart",
+  "name": "github.com/gaissmai/bart",
+  "artifactVersion": "v0.29.0",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/github.com/gaissmai/bart",
+  "developers": [],
+  "licenses": [
+    "go-mit-8fc2dc86e3"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

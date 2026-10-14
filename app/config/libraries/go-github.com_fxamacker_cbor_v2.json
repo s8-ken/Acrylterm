@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:github.com/fxamacker/cbor/v2",
+  "name": "github.com/fxamacker/cbor/v2",
+  "artifactVersion": "v2.9.3",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/github.com/fxamacker/cbor/v2",
+  "developers": [],
+  "licenses": [
+    "go-mit-eee8bc536d"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

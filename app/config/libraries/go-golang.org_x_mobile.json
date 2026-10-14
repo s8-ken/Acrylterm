@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:golang.org/x/mobile",
+  "name": "golang.org/x/mobile",
+  "artifactVersion": "v0.0.0-20261011034528-197770444867",
+  "description": "gomobile bindings (generated code and runtime in tsbridge)",
+  "website": "https://pkg.go.dev/golang.org/x/mobile",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-9d7627991f"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

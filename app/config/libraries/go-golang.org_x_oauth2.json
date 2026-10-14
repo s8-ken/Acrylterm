@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:golang.org/x/oauth2",
+  "name": "golang.org/x/oauth2",
+  "artifactVersion": "v0.37.0",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/golang.org/x/oauth2",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-911f8f5782"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

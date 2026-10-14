@@ -11,5 +11,6 @@
 - リリース APK:`./gradlew :app:assembleRelease`。署名は gitignore された `keystore.properties`(鍵本体は `~/.android/acrylterm-release.jks`)を使い、無ければデバッグ鍵にフォールバックする。GitHub Release に載せる APK は必ず本番鍵で署名する(デバッグ鍵の APK とは上書き更新できない)。
 - ユニットテスト:`./gradlew :app:testDebugUnitTest`(`app/src/test/`、純粋ロジックのみ)。`verify.sh` には含まれない。
 - Tailscale 内蔵:`./tsbridge/build.sh` で `app/libs/tsbridge.aar` を生成する(NDK 30.0.16248370 を導入済み、所要は数分)。AAR が無くてもアプリはビルドできる。
+- ライセンス:依存(`app/build.gradle.kts` / `tsbridge/go.mod`)を変えたら `scripts/gen-go-licenses.sh` を実行して `app/config/` の差分をコミットする(Android 側は AboutLibraries がビルド時に自動収集。Go が無い環境でもビルドできるよう Go 側は生成物をコミット)。
 - 実機:`./gradlew :app:installDebug`(USB デバッグで接続した端末)。Gradle には `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"` が必要。
   - Wi-Fi 経由:端末でワイヤレス デバッグを有効にし、`adb mdns services` で `ip:port` を確認して `adb connect <ip:port>` してから同じコマンドを使う(ペアリング済み)。

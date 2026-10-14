@@ -25,6 +25,7 @@ import com.shibaken.androidterminal.ui.ExtScriptsScreen
 import com.shibaken.androidterminal.ui.HostEditScreen
 import com.shibaken.androidterminal.ui.HostListScreen
 import com.shibaken.androidterminal.ui.KeysScreen
+import com.shibaken.androidterminal.ui.LicensesScreen
 import com.shibaken.androidterminal.ui.PromptHost
 import com.shibaken.androidterminal.ui.TailscaleScreen
 import com.shibaken.androidterminal.ui.TerminalScreen
@@ -82,7 +83,8 @@ class MainActivity : FragmentActivity() {
                             onManageKeys = { nav.navigate("keys") },
                         )
                     }
-                    composable("appearance") { AppearanceScreen(onBack = { nav.popBackStack() }) }
+                    composable("appearance") { AppearanceScreen(onBack = { nav.popBackStack() }, onLicenses = { nav.navigate("licenses") }) }
+                    composable("licenses") { LicensesScreen(onBack = { nav.popBackStack() }) }
                     composable("keys") { KeysScreen(onBack = { nav.popBackStack() }) }
                     composable("ext") { ExtScriptsScreen(onBack = { nav.popBackStack() }) }
                     composable("tailscale") { TailscaleScreen(onBack = { nav.popBackStack() }) }

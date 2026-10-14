@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:github.com/pires/go-proxyproto",
+  "name": "github.com/pires/go-proxyproto",
+  "artifactVersion": "v0.15.0",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/github.com/pires/go-proxyproto",
+  "developers": [],
+  "licenses": [
+    "go-apache-2.0-9fc6a72266"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

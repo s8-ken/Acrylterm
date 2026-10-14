@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:github.com/x448/float16",
+  "name": "github.com/x448/float16",
+  "artifactVersion": "v0.8.4",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/github.com/x448/float16",
+  "developers": [],
+  "licenses": [
+    "go-mit-6ddf66f67d"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

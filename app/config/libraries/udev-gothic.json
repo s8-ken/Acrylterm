@@ -1,0 +1,15 @@
+{
+  "uniqueId": "font:udev-gothic",
+  "name": "UDEV Gothic",
+  "description": "Monospace font bundled with the app (Regular).",
+  "website": "https://github.com/yuru7/udev-gothic",
+  "developers": [
+    {
+      "name": "Yuko Otawara (yuru7)"
+    }
+  ],
+  "licenses": [
+    "ofl-1.1-udev-gothic"
+  ],
+  "openSource": true
+}

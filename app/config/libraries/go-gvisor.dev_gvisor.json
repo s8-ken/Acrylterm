@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:gvisor.dev/gvisor",
+  "name": "gvisor.dev/gvisor",
+  "artifactVersion": "v0.0.0-20260915211658-a6f909f08a72",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/gvisor.dev/gvisor",
+  "developers": [],
+  "licenses": [
+    "go-apache-2.0-856292130f"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

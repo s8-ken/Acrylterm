@@ -1,0 +1,13 @@
+{
+  "uniqueId": "go:golang.org/x/exp",
+  "name": "golang.org/x/exp",
+  "artifactVersion": "v0.0.0-20260908205506-85c1c2202aba",
+  "description": "Go module linked into tsbridge",
+  "website": "https://pkg.go.dev/golang.org/x/exp",
+  "developers": [],
+  "licenses": [
+    "go-bsd-3-clause-9d7627991f"
+  ],
+  "openSource": true,
+  "tag": "go"
+}

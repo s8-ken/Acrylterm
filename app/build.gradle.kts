@@ -5,6 +5,12 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.aboutlibraries)
+}
+
+// Android dependency licenses are collected from the POMs; Go/Termux/font entries come from config/ (see scripts/gen-go-licenses.sh).
+aboutLibraries {
+    configPath = file("config").absolutePath
 }
 
 android {
@@ -102,6 +108,7 @@ dependencies {
     implementation(libs.sshj)
     implementation(libs.bcprov)
     implementation(libs.bcpkix)
+    implementation(libs.aboutlibraries.compose.m3)
 
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
