@@ -23,17 +23,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.shibaken.androidterminal.R
 import com.shibaken.androidterminal.data.AppearanceSettings
+import com.shibaken.androidterminal.data.ColorPalette
 
 val LocalAppearance = staticCompositionLocalOf { AppearanceSettings() }
 
 /** Only this wallpaper layer is blurred. No text or Android terminal View is faded/blurred. */
 @Composable
-fun AuroraBackground(modifier: Modifier = Modifier, blurred: Boolean = LocalAppearance.current.blurBackground) {
-    Canvas(modifier.background(CyanVeil.Background).then(if (blurred) Modifier.blur(24.dp) else Modifier)) {
+fun AuroraBackground(
+    modifier: Modifier = Modifier,
+    blurred: Boolean = LocalAppearance.current.blurBackground,
+    palette: ColorPalette = CyanVeil.palette,
+) {
+    Canvas(modifier.background(Color(palette.background)).then(if (blurred) Modifier.blur(24.dp) else Modifier)) {
         val stops = if (blurred) arrayOf(
-            0f to CyanVeil.Background, .46f to Color(0xFF0C272F), .74f to Color(0xFF27636B), 1f to Color(0xFF122932),
+            0f to Color(palette.background), .46f to Color(palette.aurora1), .74f to Color(palette.aurora2), 1f to Color(palette.aurora3),
         ) else arrayOf(
-            0f to CyanVeil.Background, .54f to Color(0xFF0C272F), .72f to Color(0xFF27636B), .90f to Color(0xFF122932),
+            0f to Color(palette.background), .54f to Color(palette.aurora1), .72f to Color(palette.aurora2), .90f to Color(palette.aurora3),
         )
         drawRect(Brush.linearGradient(*stops, start = Offset.Zero, end = Offset(size.width * 1.1f, size.height * .55f)))
     }

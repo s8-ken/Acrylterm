@@ -1,20 +1,18 @@
 package com.shibaken.androidterminal.terminal
 
+import com.shibaken.androidterminal.data.ColorPalette
+import com.shibaken.androidterminal.data.ColorProfiles
 import com.termux.terminal.TerminalColors
 import java.util.Properties
 
-/** Installed once before creating sessions. Remote OSC palette overrides continue to work. */
+/** Installed before creating sessions and on apply. Remote OSC palette overrides continue to work. */
 object CyanVeilTerminalPalette {
-    fun install() {
-        val colors = listOf(
-            "#071216", "#E57084", "#86DDB4", "#E9BB78", "#7EBBDA", "#BDA6E8", "#50CFC4", "#C7DDDD",
-            "#57777F", "#FF8497", "#9CF6C9", "#FFD18A", "#A5D8F3", "#D7BEFF", "#64F4E5", "#E4F7F6",
-        )
+    fun install(palette: ColorPalette = ColorProfiles.CyanVeil) {
         TerminalColors.COLOR_SCHEME.updateWith(Properties().apply {
-            setProperty("foreground", "#E4F7F6")
-            setProperty("background", "#071216")
-            setProperty("cursor", "#64F4E5")
-            colors.forEachIndexed { i, color -> setProperty("color$i", color) }
+            setProperty("foreground", ColorProfiles.toHex(palette.terminalForeground))
+            setProperty("background", ColorProfiles.toHex(palette.terminalBackground))
+            setProperty("cursor", ColorProfiles.toHex(palette.terminalCursor))
+            palette.ansi.forEachIndexed { i, color -> setProperty("color$i", ColorProfiles.toHex(color)) }
         })
     }
 }

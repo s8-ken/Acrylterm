@@ -342,11 +342,12 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                         val tint = CyanVeil.Muted
                         @Composable fun Item(label: String, icon: ImageVector, onClick: () -> Unit) =
                             DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(icon, null, tint = tint) }, onClick = { menu = false; onClick() })
-                        Item("ホスト一覧", Icons.AutoMirrored.Filled.ArrowBack) { onBack() }
+                        Item("ホスト一覧に戻る", Icons.AutoMirrored.Filled.ArrowBack) { onBack() }
                         if (herdr != null) {
+                            HorizontalDivider()
+                            Item("セッション一覧", Icons.Filled.Dns) { showSessionPicker = true; session.refreshHerdrSessions() }
                             Item("ワークスペース一覧", Icons.Filled.Menu) { scope.launch { drawerState.open() } }
                             Item("タブ一覧", Icons.Filled.GridView) { showOverview = true }
-                            Item("セッション一覧", Icons.Filled.Dns) { showSessionPicker = true; session.refreshHerdrSessions() }
                         }
                         if (extensionsEnabled && session.profile.extEnabled) {
                             HorizontalDivider()
@@ -379,7 +380,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                 Modifier.fillMaxWidth().height(56.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                VeilIconButton(R.drawable.veil_back, "ホスト一覧", onBack)
+                VeilIconButton(R.drawable.veil_back, "ホスト一覧に戻る", onBack)
                 Spacer(Modifier.width(10.dp))
                 if (herdr != null && !isPanes) {
                     IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Filled.Menu, "ワークスペースを開く") }

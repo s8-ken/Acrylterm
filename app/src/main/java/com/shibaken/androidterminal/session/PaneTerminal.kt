@@ -314,6 +314,12 @@ class PaneTerminal(
         emulator.paste(text)
     }
 
+    /** Main thread. Re-reads the default colors from the color scheme (after the user changed the profile). */
+    fun refreshColors() {
+        emulator.mColors.reset()
+        onScreenUpdate?.invoke()
+    }
+
     override fun resize(newCols: Int, newRows: Int, cellWidth: Int, cellHeight: Int) {
         if (newCols < 4 || newRows < 2) return
         if (newCols == cols && newRows == rows && cellWidth == cellW && cellHeight == cellH) return

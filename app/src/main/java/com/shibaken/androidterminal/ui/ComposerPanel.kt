@@ -79,8 +79,9 @@ fun ComposerPanel(draftKey: String, onSend: suspend (String) -> Boolean, onDismi
     val scope = rememberCoroutineScope()
     var sending by remember { mutableStateOf(false) }
     var text by remember(draftKey) { mutableStateOf(ComposerDrafts.get(draftKey)) }
-    val latest = rememberUpdatedState(text)
-    DisposableEffect(draftKey) { onDispose { ComposerDrafts.set(draftKey, latest.value) } }
+    // Reads the state itself: a send clears it and closes the panel in the same frame, so the body never recomposes
+    // with "" before disposal and a rememberUpdatedState copy would save the sent text back as the draft.
+    DisposableEffect(draftKey) { onDispose { ComposerDrafts.set(draftKey, text) } }
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -178,6 +179,7 @@ fun ComposerPanel(draftKey: String, onSend: suspend (String) -> Boolean, onDismi
                             val ok = try { onSend(t) } finally { sending = false }
                             if (ok) {
                                 text = ""
+                                ComposerDrafts.set(draftKey, "")
                                 close()
                             }
                         }

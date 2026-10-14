@@ -3,6 +3,7 @@ package com.shibaken.androidterminal
 import android.app.Application
 import com.shibaken.androidterminal.data.AppSettingsRepository
 import com.shibaken.androidterminal.data.AppearanceRepository
+import com.shibaken.androidterminal.ui.CyanVeil
 import com.shibaken.androidterminal.terminal.CyanVeilTerminalPalette
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -42,7 +43,9 @@ class App : Application() {
         createNotificationChannels()
 
         appearance = AppearanceRepository(this)
-        CyanVeilTerminalPalette.install()
+        val startPalette = appearance.settings.value.colors.resolve()
+        CyanVeil.palette = startPalette
+        CyanVeilTerminalPalette.install(startPalette)
         hosts = HostRepository(this)
         knownHosts = KnownHostsRepository(this)
         keys = KeyRepository(this)
@@ -52,6 +55,15 @@ class App : Application() {
             hosts.hosts.value.any { it.extEnabled } || scriptStore.listGlobal().isNotEmpty()
         }
         sessions = SessionManager(this)
+    }
+
+    /** Saves [settings] and switches the live UI palette and terminal colors to the selected profile. */
+    fun applyAppearance(settings: com.shibaken.androidterminal.data.AppearanceSettings) {
+        appearance.save(settings)
+        val palette = settings.colors.resolve()
+        CyanVeil.palette = palette
+        CyanVeilTerminalPalette.install(palette)
+        sessions.refreshTerminalColors()
     }
 
     /**

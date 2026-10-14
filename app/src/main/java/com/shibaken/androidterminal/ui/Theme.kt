@@ -6,58 +6,66 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.shibaken.androidterminal.data.ColorPalette
+import com.shibaken.androidterminal.data.ColorProfiles
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.shibaken.androidterminal.herdr.AgentStatus
 
+/** Color roles read through a snapshot state, so changing [palette] recomposes/redraws every reader. */
 object CyanVeil {
-    val Background = Color(0xFF071216)
-    val Surface = Color(0xFF102329)
-    val Raised = Color(0xFF173239)
-    val Cyan = Color(0xFF64F4E5)
-    val Mint = Color(0xFF9CF6C9)
-    val Amber = Color(0xFFFFD18A)
-    val Rose = Color(0xFFFF8497)
-    val Text = Color(0xFFE4F7F6)
-    val Muted = Color(0xFF96B2B8)
-    val Border = Color(0xFF2B4B52)
-    val Ink = Color(0xFF052629)
+    var palette by mutableStateOf(ColorProfiles.CyanVeil)
+
+    val Background get() = Color(palette.background)
+    val Surface get() = Color(palette.surface)
+    val Raised get() = Color(palette.raised)
+    val Cyan get() = Color(palette.accent)
+    val Mint get() = Color(palette.secondary)
+    val Amber get() = Color(palette.warning)
+    val Rose get() = Color(palette.error)
+    val Text get() = Color(palette.text)
+    val Muted get() = Color(palette.muted)
+    val Border get() = Color(palette.border)
+    val Ink get() = Color(palette.ink)
 }
 
-private val Scheme = darkColorScheme(
-    primary = CyanVeil.Cyan, onPrimary = CyanVeil.Ink,
-    primaryContainer = CyanVeil.Raised, onPrimaryContainer = CyanVeil.Cyan,
-    secondary = CyanVeil.Mint, onSecondary = CyanVeil.Ink,
-    secondaryContainer = CyanVeil.Raised, onSecondaryContainer = CyanVeil.Mint,
-    tertiary = CyanVeil.Amber, onTertiary = CyanVeil.Ink,
-    tertiaryContainer = CyanVeil.Raised, onTertiaryContainer = CyanVeil.Amber,
-    background = CyanVeil.Background, onBackground = CyanVeil.Text,
-    surface = CyanVeil.Surface, onSurface = CyanVeil.Text,
-    surfaceVariant = CyanVeil.Raised, onSurfaceVariant = CyanVeil.Muted,
-    surfaceContainer = CyanVeil.Surface,
-    surfaceDim = CyanVeil.Background, surfaceBright = CyanVeil.Raised,
-    surfaceContainerLowest = CyanVeil.Background, surfaceContainerLow = CyanVeil.Surface,
-    surfaceContainerHigh = CyanVeil.Raised,
-    surfaceContainerHighest = Color(0xFF204049),
-    outline = CyanVeil.Muted, outlineVariant = CyanVeil.Border,
-    error = CyanVeil.Rose, onError = CyanVeil.Ink,
-    errorContainer = Color(0xFF432B34), onErrorContainer = CyanVeil.Rose,
+private fun schemeOf(p: ColorPalette) = darkColorScheme(
+    primary = Color(p.accent), onPrimary = Color(p.ink),
+    primaryContainer = Color(p.raised), onPrimaryContainer = Color(p.accent),
+    secondary = Color(p.secondary), onSecondary = Color(p.ink),
+    secondaryContainer = Color(p.raised), onSecondaryContainer = Color(p.secondary),
+    tertiary = Color(p.warning), onTertiary = Color(p.ink),
+    tertiaryContainer = Color(p.raised), onTertiaryContainer = Color(p.warning),
+    background = Color(p.background), onBackground = Color(p.text),
+    surface = Color(p.surface), onSurface = Color(p.text),
+    surfaceVariant = Color(p.raised), onSurfaceVariant = Color(p.muted),
+    surfaceContainer = Color(p.surface),
+    surfaceDim = Color(p.background), surfaceBright = Color(p.raised),
+    surfaceContainerLowest = Color(p.background), surfaceContainerLow = Color(p.surface),
+    surfaceContainerHigh = Color(p.raised),
+    surfaceContainerHighest = Color(p.surfaceHighest),
+    outline = Color(p.muted), outlineVariant = Color(p.border),
+    error = Color(p.error), onError = Color(p.ink),
+    errorContainer = Color(p.errorContainer), onErrorContainer = Color(p.error),
 )
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = Scheme, shapes = Shapes(
+    MaterialTheme(colorScheme = schemeOf(CyanVeil.palette), shapes = Shapes(
         extraSmall = RoundedCornerShape(8.dp), small = RoundedCornerShape(12.dp),
         medium = RoundedCornerShape(12.dp), large = RoundedCornerShape(20.dp), extraLarge = RoundedCornerShape(28.dp),
     )) { CompositionLocalProvider(LocalContentColor provides CyanVeil.Text, content = content) }
 }
 
 object StatusColors {
-    val blocked = CyanVeil.Amber
-    val working = CyanVeil.Cyan
-    val done = CyanVeil.Mint
-    val idle = CyanVeil.Muted
+    val blocked get() = CyanVeil.Amber
+    val working get() = CyanVeil.Cyan
+    val done get() = CyanVeil.Mint
+    val idle get() = CyanVeil.Muted
 
     fun of(status: String?): Color = when (status) {
         AgentStatus.BLOCKED -> blocked

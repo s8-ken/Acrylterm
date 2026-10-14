@@ -103,6 +103,14 @@ class SessionManager(private val app: App) {
         }
     }
 
+    /** Main thread. Applies the installed terminal color scheme to every live emulator and redraws. */
+    fun refreshTerminalColors() {
+        _sessions.value.forEach { s ->
+            s.shell?.refreshColors()
+            s.panes.value.values.forEach { it.refreshColors() }
+        }
+    }
+
     /** Re-evaluates the scripts of every live session that has extensions on (after a global script was saved). */
     fun reloadExtensions() {
         _sessions.value.forEach { it.reloadExtensions() }

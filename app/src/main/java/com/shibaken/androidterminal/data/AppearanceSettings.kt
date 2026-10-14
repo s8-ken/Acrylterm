@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 data class AppearanceSettings(
     val transparencyPercent: Int = 28,
     val blurBackground: Boolean = true,
+    val colors: ColorSelection = ColorSelection(),
 ) {
     val backgroundOpacity: Float get() = 1f - transparencyPercent.coerceIn(0, 100) / 100f
 
@@ -20,6 +21,7 @@ class AppearanceRepository(context: Context) {
         AppearanceSettings(
             preferences.getInt("transparency_percent", 28),
             preferences.getBoolean("blur_background", true),
+            ColorSelection.decode(preferences.getString("color_profile", null)),
         ).normalized()
     )
     val settings = mutableSettings.asStateFlow()
@@ -29,6 +31,7 @@ class AppearanceRepository(context: Context) {
         preferences.edit()
             .putInt("transparency_percent", normalized.transparencyPercent)
             .putBoolean("blur_background", normalized.blurBackground)
+            .putString("color_profile", normalized.colors.encode())
             .apply()
         mutableSettings.value = normalized
     }
