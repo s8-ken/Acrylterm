@@ -307,7 +307,7 @@ private fun PaneItem(
                 (view.parent as? ViewGroup)?.removeView(view)
                 view
             },
-            modifier = Modifier.weight(1f).fillMaxWidth(),
+            modifier = Modifier.weight(1f).fillMaxWidth().terminalGutters(),
             update = { v ->
                 if (v.session !== backend) v.session = backend
                 v.importantForAccessibility = if (inputEnabled) android.view.View.IMPORTANT_FOR_ACCESSIBILITY_AUTO

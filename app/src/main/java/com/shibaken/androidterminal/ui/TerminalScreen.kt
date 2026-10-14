@@ -479,7 +479,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                     }
                 }
             } else {
-                AndroidView(factory = { view }, modifier = terminalModifier)
+                AndroidView(factory = { view }, modifier = terminalModifier.terminalGutters())
             }
 
             // --- tab strip (+ quick actions in the legacy TUI mode) -----------------------
