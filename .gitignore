@@ -10,3 +10,7 @@ captures/
 app/libs/*.aar
 app/libs/*.jar
 .verify/
+# Release signing (key lives outside the repo, see keystore.properties)
+/keystore.properties
+*.jks
+*.keystore

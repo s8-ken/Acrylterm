@@ -8,6 +8,7 @@
 ## ビルド・検証
 - `bash scripts/verify.sh`:`:app:assembleDebug` を実行し、ログを `.verify/build.log` に書く(Android Studio 同梱の JDK を使う)。
   - 結果確認:`grep -nE "BUILD|^e: |^w: |What went wrong" .verify/build.log`
+- リリース APK:`./gradlew :app:assembleRelease`。署名は gitignore された `keystore.properties`(鍵本体は `~/.android/acrylterm-release.jks`)を使い、無ければデバッグ鍵にフォールバックする。GitHub Release に載せる APK は必ず本番鍵で署名する(デバッグ鍵の APK とは上書き更新できない)。
 - ユニットテスト:`./gradlew :app:testDebugUnitTest`(`app/src/test/`、純粋ロジックのみ)。`verify.sh` には含まれない。
 - Tailscale 内蔵:`./tsbridge/build.sh` で `app/libs/tsbridge.aar` を生成する(NDK 30.0.16248370 を導入済み、所要は数分)。AAR が無くてもアプリはビルドできる。
 - 実機:`./gradlew :app:installDebug`(USB デバッグで接続した端末)。Gradle には `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"` が必要。
