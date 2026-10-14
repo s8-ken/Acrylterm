@@ -1365,19 +1365,3 @@ class TerminalCanvasView @JvmOverloads constructor(
         private const val KeyCharacterMapCombining = 0x80000000.toInt() // KeyCharacterMap.COMBINING_ACCENT
     }
 }
-
-/** Sticky Ctrl/Alt state shared between the extra-keys bar and the view. */
-class Modifiers(private val onChange: () -> Unit) {
-    var ctrl = false
-        set(v) { field = v; onChange() }
-    var alt = false
-        set(v) { field = v; onChange() }
-    /** Locked modifiers stay on until tapped again (double-tap in the bar). */
-    var ctrlLocked = false
-    var altLocked = false
-
-    fun consume() {
-        if (ctrl && !ctrlLocked) ctrl = false
-        if (alt && !altLocked) alt = false
-    }
-}

@@ -36,7 +36,7 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
         end)
     """.trimIndent()
 
-    fun verifyAndCapture(sessionsOnly: Boolean = false) {
+    fun verifyAndCapture(sessionsOnly: Boolean = false, controlsOnly: Boolean = false) {
         val appearance = app.appearance.settings.value
         val sessions = app.sessions.sessions.value
         val previousScript = app.scriptStore.readGlobal(scriptName)
@@ -84,6 +84,10 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
             click("セッションを開く")
             awaitNode { it.contentDescription?.startsWith("タブ一覧") == true }
             capture("terminal")
+            if (controlsOnly) {
+                verifyControls(activity)
+                return
+            }
             verifyTopTargets()
             verifySessionPicker()
             verifyFullscreen(activity)
@@ -157,6 +161,162 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
                 else app.scriptStore.writeGlobal(scriptName, previousScript)
                 scope.cancel()
             }
+        }
+    }
+
+    private fun verifyControls(activity: MainActivity) {
+        val view = terminalView(activity)
+        val modifiers = checkNotNull(view.modifiers)
+        for (label in listOf("CTRL", "ALT")) {
+            val bounds = android.graphics.Rect().also { rect ->
+                awaitNode { it.contentDescription?.toString() == label }.getBoundsInScreen(rect)
+            }
+            fun tap() {
+                val down = android.os.SystemClock.uptimeMillis()
+                for (action in listOf(android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_UP)) {
+                    val event = android.view.MotionEvent.obtain(down, android.os.SystemClock.uptimeMillis(), action,
+                        bounds.centerX().toFloat(), bounds.centerY().toFloat(), 0)
+                    event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                    check(instrumentation.uiAutomation.injectInputEvent(event, true))
+                    event.recycle()
+                    android.os.SystemClock.sleep(30)
+                }
+            }
+            tap()
+            tap()
+            settle()
+            instrumentation.runOnMainSync {
+                check(if (label == "CTRL") modifiers.ctrlLocked else modifiers.altLocked) { "$label must HOLD on double tap" }
+                repeat(3) { view.sendKey(android.view.KeyEvent.KEYCODE_DPAD_LEFT) }
+                check(if (label == "CTRL") modifiers.ctrl else modifiers.alt) { "HOLD must survive input" }
+            }
+            // Compose exposes the state on the clickable parent, and the key label as a child.
+            awaitNode { it.isClickable && it.stateDescription?.startsWith("HOLD") == true }
+            awaitNode { it.text?.toString() == "HOLD" }
+            capture("controls-${label.lowercase()}-hold")
+            tap()
+            settle()
+            instrumentation.runOnMainSync {
+                check(!(if (label == "CTRL") modifiers.ctrl else modifiers.alt)) { "Tap must release HOLD" }
+            }
+            tap()
+            settle()
+            instrumentation.runOnMainSync {
+                check(if (label == "CTRL") modifiers.ctrl else modifiers.alt)
+                check(!(if (label == "CTRL") modifiers.ctrlLocked else modifiers.altLocked))
+                view.sendKey(android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
+                check(!(if (label == "CTRL") modifiers.ctrl else modifiers.alt)) { "Single tap must apply once" }
+            }
+        }
+        verifyFlickKey(activity)
+        click("メニュー")
+        click("その他のキー")
+        for (label in listOf("HOME", "END", "PGUP", "PGDN", "右矢印")) {
+            awaitNode { it.text?.toString() == label || it.contentDescription?.toString() == label }
+        }
+        capture("controls-more-keys")
+        click("閉じる")
+        click("キーボードの表示/非表示")
+        awaitCondition { imeVisible(activity) }
+        verifyControlsFit()
+        instrumentation.runOnMainSync {
+            check(view.directInput)
+            val info = android.view.inputmethod.EditorInfo()
+            view.onCreateInputConnection(info)
+            check(info.inputType and android.text.InputType.TYPE_MASK_VARIATION == android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD)
+            check(info.inputType and android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS != 0)
+        }
+        capture("controls-direct-keyboard")
+        click("キーボードの表示/非表示")
+        awaitCondition { !imeVisible(activity) }
+        click("返信を作成")
+        awaitCondition { imeVisible(activity) }
+        val editor = awaitNode { it.isEditable }
+        check(!editor.isPassword)
+        check(editor.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "日本語の返信を確認")
+        }))
+        awaitNode { it.isEditable && it.text?.toString() == "日本語の返信を確認" }
+        capture("controls-japanese-reply")
+        instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        awaitCondition { !imeVisible(activity) }
+        instrumentation.runOnMainSync {
+            com.shibaken.androidterminal.ui.ComposerDrafts.set("${session.id}/p0", "")
+        }
+        verifyFullscreen(activity)
+    }
+
+    private fun verifyControlsFit(): android.graphics.Rect {
+        val density = app.resources.displayMetrics.density
+        val bounds = listOf("キーボードの表示/非表示", "ESC", "TAB", "CTRL", "ALT", "方向キー").map { label ->
+            var node = awaitNode { it.contentDescription?.toString() == label || it.text?.toString() == label }
+            while (!node.isClickable) node = checkNotNull(node.parent)
+            android.graphics.Rect().also { rect ->
+                node.getBoundsInScreen(rect)
+                check(rect.width() >= (44 * density).toInt() - 1 && rect.height() >= (48 * density).toInt() - 1) { "$label must retain a full touch target: $rect" }
+                check(rect.left >= 0 && rect.right <= app.resources.displayMetrics.widthPixels) { "$label must fit without scrolling: $rect" }
+            }
+        }
+        check(bounds.map { it.centerY() }.distinct().size == 1) { "All six keys must be on one row" }
+        check(bounds.zipWithNext().all { (left, right) -> left.right <= right.left })
+        return bounds.last()
+    }
+
+    private fun verifyFlickKey(activity: MainActivity) {
+        val bounds = verifyControlsFit()
+        val view = terminalView(activity)
+        val original = checkNotNull(view.session)
+        val sent = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val recording = object : com.shibaken.androidterminal.terminal.TerminalBackend by original {
+            override fun sendText(text: String) { sent += text }
+        }
+        instrumentation.runOnMainSync { view.session = recording }
+        val distance = 24 * app.resources.displayMetrics.density
+        fun gesture(dx: Float = 0f, dy: Float = 0f, hold: Long = 0, center: Boolean = false, cancel: Boolean = false) {
+            val down = android.os.SystemClock.uptimeMillis()
+            fun event(action: Int, x: Float, y: Float) {
+                val motion = android.view.MotionEvent.obtain(down, android.os.SystemClock.uptimeMillis(), action,
+                    bounds.centerX() + x, bounds.centerY() + y, 0)
+                motion.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                check(instrumentation.uiAutomation.injectInputEvent(motion, true))
+                motion.recycle()
+                android.os.SystemClock.sleep(16)
+            }
+            event(android.view.MotionEvent.ACTION_DOWN, 0f, 0f)
+            if (dx != 0f || dy != 0f) for (step in 1..3) event(android.view.MotionEvent.ACTION_MOVE, dx * step / 3, dy * step / 3)
+            if (hold > 0) android.os.SystemClock.sleep(hold)
+            if (center) event(android.view.MotionEvent.ACTION_MOVE, 0f, 0f)
+            event(if (cancel) android.view.MotionEvent.ACTION_CANCEL else android.view.MotionEvent.ACTION_UP,
+                if (center) 0f else dx, if (center) 0f else dy)
+            instrumentation.waitForIdleSync()
+        }
+        try {
+            for ((delta, expected) in listOf(
+                (distance to 0f) to "\u001b[C", (-distance to 0f) to "\u001b[D",
+                (0f to -distance) to "\u001b[A", (0f to distance) to "\u001b[B",
+            )) {
+                sent.clear()
+                gesture(delta.first, delta.second)
+                check(sent == listOf(expected)) { "Flick must send exactly one direction: $sent" }
+            }
+            sent.clear()
+            gesture()
+            check(sent == listOf("\r")) { "Center tap must send one Enter: $sent" }
+            sent.clear()
+            gesture(distance, center = true)
+            check(sent == listOf("\u001b[C")) { "Returning to center must not send Enter: $sent" }
+            sent.clear()
+            gesture(cancel = true)
+            check(sent.isEmpty()) { "Canceled touch must not send Enter: $sent" }
+            sent.clear()
+            gesture(distance, hold = 650)
+            check(sent.size >= 3 && sent.all { it == "\u001b[C" }) { "Holding a direction must repeat: $sent" }
+            val count = sent.size
+            android.os.SystemClock.sleep(250)
+            check(sent.size == count) { "Repeats must stop on release" }
+            capture("controls-flick")
+        } finally {
+            instrumentation.runOnMainSync { view.session = original }
         }
     }
 
@@ -422,20 +582,18 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
         awaitCondition { extensions.engine.registry.value.commands.any { it.name == "UI 動作確認" } }
         click("セッションを開く")
         click("メニュー")
+        click("その他のキー")
         click("拡張コマンド")
         awaitNode { it.text?.toString() == "UI 動作確認" }
         capture("extension-commands")
         click("UI 動作確認")
         awaitCondition { extensions.log.value.any { "CYAN_UI_COMMAND" in it } }
-        repeat(4) {
-            if (find { it.contentDescription?.toString() == "拡張キー: 確認" } == null) {
-                awaitNode { it.contentDescription?.toString() == "補助キー" }.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
-                settle()
-            }
-        }
+        click("メニュー")
+        click("その他のキー")
         click("拡張キー: 確認")
         awaitCondition { extensions.log.value.any { "CYAN_UI_KEY" in it } }
         capture("extension-keys")
+        click("閉じる")
 
         click("メニュー")
         click("ホスト一覧")

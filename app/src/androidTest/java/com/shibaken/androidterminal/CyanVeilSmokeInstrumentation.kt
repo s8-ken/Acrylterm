@@ -20,17 +20,26 @@ class CyanVeilSmokeInstrumentation : Instrumentation() {
     private var captureUi = false
     private var sessionsOnly = false
     private var extensionInputOnly = false
+    private var controlsOnly = false
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
         captureUi = arguments?.getString("capture_ui") == "true"
         sessionsOnly = arguments?.getString("herdr_sessions") == "true"
         extensionInputOnly = arguments?.getString("extension_input") == "true"
+        controlsOnly = arguments?.getString("controls") == "true"
         start()
     }
 
     override fun onStart() {
         val result = Bundle()
         try {
+            if (controlsOnly) {
+                runOnMainSync { verifyModifierInput() }
+                CyanVeilUiCapture(this).verifyAndCapture(controlsOnly = true)
+                result.putString("stream", "PASS: Ctrl/Alt HOLD/release, six visible keys, four flick directions, Enter, cancel/return-to-center, repeat/release, extra keys menu, direct keyboard and Japanese reply composer.\n")
+                finish(Activity.RESULT_OK, result)
+                return
+            }
             if (extensionInputOnly) {
                 ExtensionInputChecks(this).run()
                 result.putString("stream", "PASS: extension paste/submit/raw encoding, LF/CRLF/CR, UTF-8, ordered shell writes and disconnected/failed writes.\n")
@@ -50,6 +59,39 @@ class CyanVeilSmokeInstrumentation : Instrumentation() {
         } catch (error: Throwable) {
             result.putString("stream", "FAIL: ${error.stackTraceToString()}\n")
             finish(Activity.RESULT_CANCELED, result)
+        }
+    }
+
+    private fun verifyModifierInput() {
+        val backend = TestTerminal()
+        val modifiers = com.shibaken.androidterminal.terminal.Modifiers {}
+        val view = TerminalCanvasView(targetContext).apply {
+            session = backend
+            this.modifiers = modifiers
+            directInput = true
+        }
+        val connection = view.onCreateInputConnection(android.view.inputmethod.EditorInfo())
+        try {
+            modifiers.tapCtrl(1_000, 300)
+            connection.commitText("c", 1)
+            connection.commitText("c", 1)
+            check(backend.sent == listOf("\u0003", "c"))
+            backend.sent.clear()
+            modifiers.tapCtrl(2_000, 300)
+            modifiers.tapCtrl(2_100, 300)
+            repeat(2) { connection.commitText("c", 1) }
+            connection.commitText("-", 1)
+            check(backend.sent == listOf("\u0003", "\u0003", "\u001f"))
+            modifiers.tapCtrl(2_200, 300)
+            backend.sent.clear()
+            modifiers.tapAlt(3_000, 300)
+            modifiers.tapAlt(3_100, 300)
+            repeat(2) { connection.commitText("x", 1) }
+            check(backend.sent == listOf("\u001bx", "\u001bx"))
+            check(modifiers.altLocked)
+        } finally {
+            connection.closeConnection()
+            view.session = null
         }
     }
 
@@ -122,6 +164,7 @@ class CyanVeilSmokeInstrumentation : Instrumentation() {
     }
 
     private class TestTerminal : TerminalBackend {
+        val sent = mutableListOf<String>()
         private val output = object : TerminalOutput() {
             override fun write(data: ByteArray, offset: Int, count: Int) {}
             override fun titleChanged(oldTitle: String?, newTitle: String?) {}
@@ -136,7 +179,7 @@ class CyanVeilSmokeInstrumentation : Instrumentation() {
         } as TerminalSessionClient
         override val emulator = TerminalEmulator(output, 40, 10, 10, 20, 100, client)
         override var onScreenUpdate: (() -> Unit)? = null
-        override fun sendText(text: String) {}
+        override fun sendText(text: String) { sent += text }
         override fun pasteFromClipboard() {}
         override fun resize(newCols: Int, newRows: Int, cellWidth: Int, cellHeight: Int) {
             emulator.resize(newCols, newRows, cellWidth, cellHeight)

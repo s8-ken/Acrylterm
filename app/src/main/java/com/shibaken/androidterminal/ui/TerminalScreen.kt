@@ -159,7 +159,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     // Re-read modifier state for the extra-keys highlight.
     var modTick by remember { mutableIntStateOf(0) }
     val modifiers = remember { Modifiers { modTick++ } }
-    var directInput by remember { mutableStateOf(false) }
+    var showMoreKeys by remember { mutableStateOf(false) }
     var confirmClosePane by remember { mutableStateOf(false) }
     var confirmCloseConnection by remember { mutableStateOf(false) }
     var terminalFullscreen by rememberSaveable(sessionId) { mutableStateOf(false) }
@@ -179,8 +179,9 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     SideEffect {
         view.backgroundOpacity = appearance.backgroundOpacity
         pool.backgroundOpacity = appearance.backgroundOpacity
-        view.directInput = directInput
-        pool.directInput = directInput
+        // Terminal keyboard is for commands; the reply composer keeps the full Japanese IME.
+        view.directInput = true
+        pool.directInput = true
     }
     DisposableEffect(pool) { onDispose { pool.clear() } }
 
@@ -327,6 +328,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                         @Composable fun Item(label: String, icon: ImageVector, onClick: () -> Unit) =
                             DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(icon, null, tint = tint) }, onClick = { menu = false; onClick() })
                         Item("ホスト一覧", Icons.AutoMirrored.Filled.ArrowBack) { onBack() }
+                        Item("その他のキー", Icons.Filled.TextFields) { showMoreKeys = true }
                         if (herdr != null) {
                             Item("ワークスペース一覧", Icons.Filled.Menu) { scope.launch { drawerState.open() } }
                             Item("タブ一覧", Icons.Filled.GridView) { showOverview = true }
@@ -449,7 +451,10 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                             }
                         }
                         if (fullscreen) {
-                            IconButton(onClick = { activeView.toggleKeyboard() }, modifier = Modifier.size(48.dp)) {
+                            IconButton(onClick = {
+                                activeView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                                activeView.toggleKeyboard()
+                            }, modifier = Modifier.size(48.dp)) {
                                 VeilIcon(R.drawable.veil_keyboard, "キーボードの表示/非表示", CyanVeil.Cyan)
                             }
                             IconButton(onClick = { terminalFullscreen = false }, modifier = Modifier.size(48.dp)) {
@@ -517,9 +522,13 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                 view = activeView,
                 ctrlOn = modTick >= 0 && modifiers.ctrl,
                 altOn = modTick >= 0 && modifiers.alt,
-                onCtrl = { modifiers.ctrl = !modifiers.ctrl },
-                onAlt = { modifiers.alt = !modifiers.alt },
+                ctrlHeld = modifiers.ctrlLocked,
+                altHeld = modifiers.altLocked,
+                onCtrl = { modifiers.tapCtrl(android.os.SystemClock.uptimeMillis(), android.view.ViewConfiguration.getDoubleTapTimeout().toLong()) },
+                onAlt = { modifiers.tapAlt(android.os.SystemClock.uptimeMillis(), android.view.ViewConfiguration.getDoubleTapTimeout().toLong()) },
                 onKeyboard = { activeView.toggleKeyboard() },
+                showMoreKeys = showMoreKeys,
+                onDismissMoreKeys = { showMoreKeys = false },
                 showPrefixKey = !isPanes,
                 extKeys = extRegistry?.takeIf { extensionsEnabled }?.keys?.map { it.label } ?: emptyList(),
                 onExtKey = { i -> extRt?.engine?.pressKey(i, if (isPanes) focusedPaneId else "shell") },
@@ -528,7 +537,10 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
             )
             if (!fullscreen && isPanes) {
                 Row(Modifier.hideWhenIme(imeInsets).fillMaxWidth().clip(RoundedCornerShape(100.dp)).background(CyanVeil.Surface)
-                    .clickable { showComposer = true }.semantics { contentDescription = "返信を作成" }
+                    .clickable {
+                        activeView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                        showComposer = true
+                    }.semantics { contentDescription = "返信を作成" }
                     .padding(horizontal = 12.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     VeilIcon(R.drawable.veil_edit, null, CyanVeil.Cyan)
