@@ -3,6 +3,7 @@ package com.shibaken.androidterminal.ui
 import android.graphics.Typeface
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -102,9 +103,9 @@ fun PaneOverview(state: HerdrState, herdr: HerdrController, onDismiss: () -> Uni
                     DropdownMenu(overviewMenu, { overviewMenu = false }) {
                         DropdownMenuItem(text = { Text("新しいワークスペース") }, onClick = { overviewMenu = false; newWorkspace = true })
                         HorizontalDivider()
-                        DropdownMenuItem(text = { Column { Text("すべてのタブを閉じる"); Text("全ワークスペースが対象", style = MaterialTheme.typography.labelSmall) } },
+                        DropdownMenuItem(text = { Text("すべてのタブを閉じる") },
                             enabled = rawState.tabs.isNotEmpty(), onClick = { overviewMenu = false; closePlan = rawState.bulkClosePlan(BulkCloseKind.TABS) })
-                        DropdownMenuItem(text = { Column { Text("すべてのワークスペースを閉じる"); Text("この接続の全ワークスペースが対象", style = MaterialTheme.typography.labelSmall) } },
+                        DropdownMenuItem(text = { Text("すべてのワークスペースを閉じる") },
                             enabled = rawState.workspaces.isNotEmpty(), onClick = { overviewMenu = false; closePlan = rawState.bulkClosePlan(BulkCloseKind.WORKSPACES) })
                     }
                 }
@@ -115,12 +116,21 @@ fun PaneOverview(state: HerdrState, herdr: HerdrController, onDismiss: () -> Uni
                 horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 item { FilterChip(workspace == null, { workspace = null }, { Text("すべて · ${state.tabs.size}") }, shape = CircleShape) }
                 items(state.workspaces, key = { it.workspaceId }) { ws ->
-                    FilterChip(workspace == ws.workspaceId, { workspace = ws.workspaceId },
+                    val selected = workspace == ws.workspaceId
+                    // New tabs go to the filtered workspace, or to herdr's focused one when showing all.
+                    val isTarget = ws.workspaceId == (workspace ?: state.focusedWorkspaceId)
+                    FilterChip(selected, { workspace = ws.workspaceId },
                         modifier = Modifier.semantics {
                             contentDescription = ws.title
-                            stateDescription = if (workspace == ws.workspaceId) "絞り込み中" else "絞り込みなし"
+                            stateDescription = (if (selected) "絞り込み中" else "絞り込みなし") + if (isTarget) "、新しいタブの追加先" else ""
                         },
+                        border = if (isTarget && !selected) BorderStroke(1.dp, CyanVeil.Cyan)
+                            else FilterChipDefaults.filterChipBorder(enabled = true, selected = selected),
                         label = { Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isTarget) {
+                                Box(Modifier.size(6.dp).background(CyanVeil.Cyan, CircleShape))
+                                Spacer(Modifier.width(6.dp))
+                            }
                             Text(ws.title, Modifier.widthIn(max = 132.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         } }, shape = CircleShape)
                 }
