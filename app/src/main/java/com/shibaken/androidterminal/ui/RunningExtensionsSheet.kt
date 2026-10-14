@@ -121,7 +121,7 @@ private fun ExtRow(
 ) {
     val summary = remember(e.source) { ExtSummary.parse(e.source) }
     var expanded by remember { mutableStateOf(false) }
-    val line = summary.summary ?: featureLine(summary)
+    val line = summary.summary.orEmpty()
     VeilCard(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -129,7 +129,8 @@ private fun ExtRow(
                     tint = if (error != null && enabled) CyanVeil.Rose else CyanVeil.Cyan)
                 Column(Modifier.weight(1f).alpha(if (enabled) 1f else .5f)) {
                     Text(e.fileName, fontFamily = FontFamily.Monospace, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (line.isNotBlank()) Text(line, color = CyanVeil.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (summary.summary != null) Text(line, color = CyanVeil.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    ExtTags(summary, Modifier.padding(top = 4.dp))
                 }
                 if (error != null && enabled) StatusPill("エラー", CyanVeil.Rose)
                 Switch(enabled, onToggle, modifier = Modifier.semantics { contentDescription = "${e.fileName} の有効/無効" })
@@ -145,12 +146,3 @@ private fun ExtRow(
         }
     }
 }
-
-private fun featureLine(s: ExtSummary): String = buildList {
-    if (s.keys.isNotEmpty()) add("キー ${s.keys.size}")
-    if (s.commands.isNotEmpty()) add("コマンド ${s.commands.size}")
-    if (s.triggers > 0) add("トリガー ${s.triggers}")
-    if (s.quickReplies > 0) add("クイック返信 ${s.quickReplies}")
-    if (s.timers > 0) add("タイマー ${s.timers}")
-    if (s.events.isNotEmpty()) add("イベント ${s.events.size}")
-}.joinToString(" · ")

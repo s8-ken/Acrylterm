@@ -163,7 +163,6 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     // Re-read modifier state for the extra-keys highlight.
     var modTick by remember { mutableIntStateOf(0) }
     val modifiers = remember { Modifiers { modTick++ } }
-    var showMoreKeys by remember { mutableStateOf(false) }
     var confirmClosePane by remember { mutableStateOf(false) }
     var confirmCloseConnection by remember { mutableStateOf(false) }
     var terminalFullscreen by rememberSaveable(sessionId) { mutableStateOf(false) }
@@ -212,7 +211,6 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     }
     val extRt by session.ext.collectAsState()
     val extRegistry = extRt?.engine?.registry?.collectAsState()?.value
-    var showExtCommands by remember { mutableStateOf(false) }
     var showExtGenerate by remember { mutableStateOf(false) }
     var extGenerateName by remember { mutableStateOf("") }
     var extGenerateRequest by remember { mutableStateOf("") }
@@ -345,7 +343,6 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                         @Composable fun Item(label: String, icon: ImageVector, onClick: () -> Unit) =
                             DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(icon, null, tint = tint) }, onClick = { menu = false; onClick() })
                         Item("ホスト一覧", Icons.AutoMirrored.Filled.ArrowBack) { onBack() }
-                        Item("その他のキー", Icons.Filled.TextFields) { showMoreKeys = true }
                         if (herdr != null) {
                             Item("ワークスペース一覧", Icons.Filled.Menu) { scope.launch { drawerState.open() } }
                             Item("タブ一覧", Icons.Filled.GridView) { showOverview = true }
@@ -355,7 +352,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                             HorizontalDivider()
                             if (extRt != null) Item("拡張一覧", Icons.AutoMirrored.Filled.ViewList) { showExtRunning = true }
                             if (session.profile.extLoadFromHost && extRt != null) {
-                                Item("拡張の作成", Icons.Filled.AutoAwesome) { extGenerateName = ""; extGenerateRequest = ""; extGenerateAgent = ""; showExtGenerate = true }
+                                Item("拡張を作る", Icons.Filled.AutoAwesome) { extGenerateName = ""; extGenerateRequest = ""; extGenerateAgent = ""; showExtGenerate = true }
                             }
                             Item("拡張の再読込", Icons.Filled.Refresh) { session.reloadExtensions(fetch = true) }
                         }
@@ -544,15 +541,15 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                 onCtrl = { modifiers.tapCtrl(android.os.SystemClock.uptimeMillis(), android.view.ViewConfiguration.getDoubleTapTimeout().toLong()) },
                 onAlt = { modifiers.tapAlt(android.os.SystemClock.uptimeMillis(), android.view.ViewConfiguration.getDoubleTapTimeout().toLong()) },
                 onKeyboard = { activeView.toggleKeyboard() },
-                showMoreKeys = showMoreKeys,
-                onDismissMoreKeys = { showMoreKeys = false },
                 showPrefixKey = !isPanes,
                 extKeys = extRegistry?.takeIf { extensionsEnabled }?.keys?.map { it.label } ?: emptyList(),
                 onExtKey = { i -> extRt?.engine?.pressKey(i, if (isPanes) focusedPaneId else "shell") },
-                showExtCommands = extensionsEnabled && extRegistry != null && extRegistry.commands.isNotEmpty(),
-                onExtCommands = { showExtCommands = true },
+                extCommands = extRegistry?.takeIf { extensionsEnabled }?.commands?.map { it.name } ?: emptyList(),
+                onExtCommand = { name -> extRt?.engine?.runCommand(name) },
+                showExtCreate = extensionsEnabled && session.profile.extEnabled && session.profile.extLoadFromHost && extRt != null,
+                onExtCreate = { extGenerateName = ""; extGenerateRequest = ""; extGenerateAgent = ""; showExtGenerate = true },
             )
-            if (!fullscreen && isPanes) {
+            if (!fullscreen) {
                 Row(Modifier.hideWhenIme(imeInsets).fillMaxWidth().clip(RoundedCornerShape(100.dp)).background(CyanVeil.Surface)
                     .clickable {
                         activeView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
@@ -610,8 +607,9 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
             } else extFlying = false
         }
         }
-        if (showComposer && herdr != null) {
-        val pid = herdrState.focusedPaneId
+        if (showComposer) {
+        // PANES: the focused pane. SHELL / LEGACY_TUI: the single shell stream (needed for Japanese input there too).
+        val pid = if (isPanes) herdrState.focusedPaneId else "shell"
         if (pid == null) {
             showComposer = false
         } else {
@@ -619,8 +617,17 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                 ComposerPanel(
                     draftKey = "${session.id}/$pid",
                     onSend = { t ->
+                        val sh = session.shell
                         val bt = paneTerminals[pid]
-                        if (bt != null && bt.attached.value) {
+                        if (!isPanes || herdr == null) {
+                            if (sh == null) false
+                            else {
+                                sh.emulator.paste(t)
+                                delay(40) // keep the paste end and Enter in separate writes
+                                sh.sendText("\r")
+                                true
+                            }
+                        } else if (bt != null && bt.attached.value) {
                             // paste() wraps in bracketed paste when the app enabled it and normalises newlines.
                             bt.emulator.paste(t)
                             delay(40) // keep the paste end and Enter in separate writes
@@ -673,12 +680,6 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
         HerdrSessionSheet(session.profile.displayName, sessionPicker, connectedHerdrSession.takeIf { rawHerdrState.phase == HerdrState.Phase.READY && state is ConnState.Connected },
             onRefresh = session::refreshHerdrSessions, onSelect = session::selectHerdrSession,
             onDismiss = { showSessionPicker = false })
-    }
-
-    if (extensionsEnabled && showExtCommands && extRt != null) {
-        ExtensionCommandsSheet(commands = extRegistry?.commands.orEmpty(),
-            onRun = { name -> extRt?.engine?.runCommand(name); showExtCommands = false },
-            onDismiss = { showExtCommands = false })
     }
 
     if (extensionsEnabled && showExtGenerate) {

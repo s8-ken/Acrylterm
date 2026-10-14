@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shibaken.androidterminal.App
 import com.shibaken.androidterminal.R
+import com.shibaken.androidterminal.ext.ExtSummary
 import com.shibaken.androidterminal.ext.ScriptStore
 
 /** Global Lua scripts. Saving reloads every live session that has extensions enabled. */
@@ -84,7 +85,7 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
                                 Text("LUA EXTENSIONS", color = CyanVeil.Cyan, fontSize = 10.sp, letterSpacing = 1.sp)
                             }
                         }
-                        Text("補助キー・コマンド・クイック返信をカスタマイズできます。", color = CyanVeil.Muted, fontSize = 13.sp)
+                        Text("マクロ・自動処理・返信候補をカスタマイズできます。", color = CyanVeil.Muted, fontSize = 13.sp)
                         Text("ホスト設定で拡張を有効にすると、保存した内容が接続中のセッションにも反映されます。",
                             color = CyanVeil.Muted, fontSize = 11.sp)
                         Text("ホスト別のスクリプトは「全体に取り込む」で共通にできます。", color = CyanVeil.Muted, fontSize = 11.sp)
@@ -105,6 +106,8 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
                             Icon(Icons.Filled.Code, null, tint = CyanVeil.Cyan)
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(name, fontFamily = FontFamily.Monospace, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                val tags = remember(name, names) { store.readGlobal(name)?.let { ExtSummary.parse(it) } }
+                                if (tags != null) ExtTags(tags)
                                 Text("タップして編集", fontSize = 11.sp, color = CyanVeil.Muted)
                             }
                             IconButton(onClick = { deleting = name }) {

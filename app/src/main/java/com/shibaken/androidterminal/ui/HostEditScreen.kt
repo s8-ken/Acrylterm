@@ -179,7 +179,7 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
                 }
                 if (extensionsAvailable) VeilCard(Modifier.fillMaxWidth()) {
                     SectionHeading("拡張スクリプト", "LUA")
-                    SwitchRow("このホストで有効にする", "補助キー・コマンド・クイック返信をカスタマイズ", extEnabled) { extEnabled = it }
+                    SwitchRow("このホストで有効にする", "マクロ・自動処理・返信候補をカスタマイズ", extEnabled) { extEnabled = it }
                     SwitchRow("ホストのスクリプトを読み込む", "接続先の Lua を共通スクリプトに追加", extFromHost && extEnabled,
                         enabled = extEnabled) { extFromHost = it }
                 }

@@ -1,6 +1,7 @@
 package com.shibaken.androidterminal.ext
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -62,5 +63,50 @@ class ExtSummaryTest {
         val s = ExtSummary.parse(src)
         assertEquals(listOf("yes"), s.keys)
         assertEquals(listOf("cmd"), s.commands)
+    }
+}
+
+class ExtSummaryTagsTest {
+    @Test fun mixed_script_counts() {
+        val s = ExtSummary.parse("""
+            keys.add("a", function() end)
+            keys.add("b", function() end)
+            command("c", function() end)
+            term.on_output("err", function() end)
+            quick_reply.rule("x", {})
+        """.trimIndent())
+        assertEquals(3, s.macroCount)
+        assertTrue(s.hasAutomation)
+        assertTrue(s.hasQuickReplies)
+    }
+
+    @Test fun comment_only_mentions_ignored() {
+        val s = ExtSummary.parse("""
+            -- keys.add("a", f)
+            --[[ command("c", f)
+            term.on_output("x", f)
+            quick_reply.rule("y", {}) ]]
+            local x = 1
+        """.trimIndent())
+        assertEquals(0, s.macroCount)
+        assertFalse(s.hasAutomation)
+        assertFalse(s.hasQuickReplies)
+    }
+
+    @Test fun button_is_not_on_event() {
+        val s = ExtSummary.parse("""
+            local function button(x) end
+            button("go")
+            obj:on("evt", f)
+            function on(z) end
+        """.trimIndent())
+        assertFalse(s.hasAutomation)
+    }
+
+    @Test fun on_event_and_timers_are_automation() {
+        assertTrue(ExtSummary.parse("on(\"connected\", f)").hasAutomation)
+        assertTrue(ExtSummary.parse("timer.every(5, f)").hasAutomation)
+        assertTrue(ExtSummary.parse("timer.after(5, f)").hasAutomation)
+        assertEquals(1, ExtSummary.parse("command('x', f)").macroCount)
     }
 }

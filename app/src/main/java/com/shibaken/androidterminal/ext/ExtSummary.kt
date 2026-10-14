@@ -14,11 +14,20 @@ data class ExtSummary(
     val hasFeatures: Boolean
         get() = keys.isNotEmpty() || commands.isNotEmpty() || triggers > 0 || events.isNotEmpty() || quickReplies > 0 || timers > 0
 
+    /** ユーザーが押すもの(keys.add / command)の数。UI では「マクロ」と呼ぶ。 */
+    val macroCount: Int get() = keys.size + commands.size
+
+    /** イベント駆動の処理(term.on_output / on(...) / timer)を持つか。UI では「自動処理」。 */
+    val hasAutomation: Boolean get() = triggers > 0 || events.isNotEmpty() || timers > 0
+
+    /** quick_reply.rule を持つか。UI では「返信候補」。 */
+    val hasQuickReplies: Boolean get() = quickReplies > 0
+
     companion object {
         private val HEADER = Regex("""\A\s*--\[\[veildeck[ \t]*\r?\n?(.*?)\]\]""", RegexOption.DOT_MATCHES_ALL)
         private val KEY = Regex("""(?<![A-Za-z0-9_.])keys\s*\.\s*add\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')""")
         private val COMMAND = Regex("""(?<![A-Za-z0-9_.:])command\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')""")
-        private val EVENT = Regex("""(?<![\w.])on\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')""")
+        private val EVENT = Regex("""(?<![\w.:])on\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')""")
         private val BLOCK_COMMENT = Regex("""--\[(=*)\[""")
         private val TRIGGER = Regex("""term\s*\.\s*on_output\s*\(""")
         private val QUICK = Regex("""quick_reply\s*\.\s*rule\s*\(""")

@@ -79,7 +79,7 @@ Android アプリ
 - ホストのスクリプト(`extLoadFromHost`): 接続時に `sh -c` で `~/.config/androidterminal/*.lua` を 1 回の exec で取得して `filesDir/ext/hosts/<id>/` にキャッシュ。接続中は 3 秒ごとの `cksum` で変更検知→再取得→再読込。`.app/API.md`・`.app/log.txt` へ base64 経由で書き戻す(親ディレクトリが無ければ作らない)
 - 出力トリガー: トリガー登録があるときだけ各 `PaneTerminal.screenRevision`(200ms デバウンス)から表示行を読み、変化行を `OutputWatcher` → `ExtEngine.dispatchOutput`
 - エージェント状態: `HerdrController.onAgentTransition`(全遷移)→ `dispatchAgentStatus`。既存の通知(`AgentAlertListener`)とは独立
-- UI: `ExtraKeysBar` の末尾に `ExtRegistry.keys`、`QuickReplyBar` は `matchQuickReply` を優先、`TerminalScreen` のメニューに「拡張コマンド」「拡張の再読込」、ホスト一覧のメニューから `ExtScriptsScreen`(全体スクリプトの編集。保存で稼働中セッションを再読込)
+- UI: `ExtraKeysBar` のミニキー列末尾に `ExtRegistry.keys` と `commands`(⚡ マクロ)と「＋」、`QuickReplyBar` は `matchQuickReply` を優先、`TerminalScreen` のメニューに「拡張一覧」「拡張を作る」「拡張の再読込」(マクロ = keys+commands はミニキー列の ⚡ チップ)、ホスト一覧のメニューから `ExtScriptsScreen`(全体スクリプトの編集。保存で稼働中セッションを再読込)
 - 通知は `SessionManager.notify`(エージェント通知と同じチャンネル・タップでペインを開く)
 
 ## 既知の制限・今後

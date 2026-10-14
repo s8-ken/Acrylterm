@@ -14,13 +14,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +37,7 @@ import com.shibaken.androidterminal.terminal.TerminalCanvasView
 
 /**
  * Keys that soft keyboards lack. Ctrl/Alt apply once on tap, hold on double tap, and release on tap.
+ * A second scrollable row carries HOME/END/PGUP/PGDN, symbols, macros (extension keys + commands) and "＋".
  * "^B" (legacy TUI mode only, [showPrefixKey]) sends the multiplexer prefix (Ctrl+b).
  */
 @Composable
@@ -51,13 +50,13 @@ fun ExtraKeysBar(
     onKeyboard: () -> Unit,
     ctrlHeld: Boolean = false,
     altHeld: Boolean = false,
-    showMoreKeys: Boolean = false,
-    onDismissMoreKeys: () -> Unit = {},
     showPrefixKey: Boolean = true,
     extKeys: List<String> = emptyList(),
     onExtKey: (Int) -> Unit = {},
-    showExtCommands: Boolean = false,
-    onExtCommands: () -> Unit = {},
+    extCommands: List<String> = emptyList(),
+    onExtCommand: (String) -> Unit = {},
+    showExtCreate: Boolean = false,
+    onExtCreate: () -> Unit = {},
 ) {
     Row(
         Modifier
@@ -74,7 +73,66 @@ fun ExtraKeysBar(
         ModifierKey("ALT", active = altOn, held = altHeld, modifier = Modifier.weight(1f), onTap = onAlt)
         FlickKey(view, Modifier.weight(1f))
     }
-    if (showMoreKeys) MoreKeysDialog(view, showPrefixKey, extKeys, onExtKey, showExtCommands, onExtCommands, onDismissMoreKeys)
+    MiniKeysRow(view, showPrefixKey, extKeys, onExtKey, extCommands, onExtCommand, showExtCreate, onExtCreate)
+}
+
+/** Second, horizontally scrollable row of smaller keys that don't fit in the main bar. */
+@Composable
+private fun MiniKeysRow(
+    view: TerminalCanvasView,
+    showPrefixKey: Boolean,
+    extKeys: List<String>,
+    onExtKey: (Int) -> Unit,
+    extCommands: List<String>,
+    onExtCommand: (String) -> Unit,
+    showExtCreate: Boolean,
+    onExtCreate: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(bottom = 2.dp)
+            .semantics { contentDescription = "その他のキー" },
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        listOf(
+            "HOME" to KeyEvent.KEYCODE_MOVE_HOME,
+            "END" to KeyEvent.KEYCODE_MOVE_END,
+            "PGUP" to KeyEvent.KEYCODE_PAGE_UP,
+            "PGDN" to KeyEvent.KEYCODE_PAGE_DOWN,
+        ).forEach { (label, code) -> MiniKey(label) { view.sendKey(code) } }
+        listOf("|", "/", "-", "~").forEach { symbol -> MiniKey(symbol) { view.commitText(symbol) } }
+        if (showPrefixKey) MiniKey("^B", accent = true, desc = "プレフィックス Ctrl+B") { view.session?.sendText("\u0002") }
+        // マクロ = 拡張キー(keys.add)+ 拡張コマンド(command)。ユーザーには区別しない。
+        extKeys.forEachIndexed { index, label -> MiniKey("⚡$label", accent = true, desc = "マクロ: $label") { onExtKey(index) } }
+        extCommands.forEach { name -> MiniKey("⚡$name", accent = true, desc = "マクロ: $name") { onExtCommand(name) } }
+        if (showExtCreate) MiniKey(if (extKeys.isEmpty() && extCommands.isEmpty()) "＋ マクロを作る" else "＋", accent = true,
+            desc = "拡張を作る", onTap = onExtCreate)
+    }
+}
+
+@Composable
+private fun MiniKey(label: String, accent: Boolean = false, desc: String? = null, onTap: () -> Unit) {
+    val hapticView = LocalView.current
+    Box(
+        Modifier
+            .semantics { desc?.let { contentDescription = it } }
+            .height(32.dp)
+            .widthIn(min = 40.dp, max = 160.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (accent) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surface)
+            .clickable(role = Role.Button) {
+                hapticView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                onTap()
+            }
+            .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = if (accent) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface,
+            fontFamily = FontFamily.Monospace, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
 }
 
 @Composable
@@ -142,61 +200,4 @@ private fun ModifierKey(label: String, active: Boolean, held: Boolean, modifier:
             if (held) Text("HOLD", color = foreground, fontSize = 9.sp, lineHeight = 10.sp, fontWeight = FontWeight.Bold)
         }
     }
-}
-
-@Composable
-private fun MoreKeysDialog(
-    view: TerminalCanvasView,
-    showPrefixKey: Boolean,
-    extKeys: List<String>,
-    onExtKey: (Int) -> Unit,
-    showExtCommands: Boolean,
-    onExtCommands: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val hapticView = LocalView.current
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("その他のキー") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                val specialKeys = listOf(
-                    Triple("←", "左矢印", KeyEvent.KEYCODE_DPAD_LEFT),
-                    Triple("↓", "下矢印", KeyEvent.KEYCODE_DPAD_DOWN),
-                    Triple("↑", "上矢印", KeyEvent.KEYCODE_DPAD_UP),
-                    Triple("→", "右矢印", KeyEvent.KEYCODE_DPAD_RIGHT),
-                    Triple("HOME", "HOME", KeyEvent.KEYCODE_MOVE_HOME),
-                    Triple("END", "END", KeyEvent.KEYCODE_MOVE_END),
-                    Triple("PGUP", "PGUP", KeyEvent.KEYCODE_PAGE_UP),
-                    Triple("PGDN", "PGDN", KeyEvent.KEYCODE_PAGE_DOWN),
-                )
-                specialKeys.chunked(4).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        row.forEach { (label, desc, code) ->
-                            Key(label, desc = desc, modifier = Modifier.weight(1f)) { view.sendKey(code) }
-                        }
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("|", "/", "-", "~").forEach { symbol ->
-                        Key(symbol, modifier = Modifier.weight(1f)) { view.commitText(symbol) }
-                    }
-                }
-                if (showPrefixKey) Key("^B", accent = true, desc = "プレフィックス Ctrl+B") { view.session?.sendText("\u0002") }
-                extKeys.withIndex().chunked(3).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        row.forEach { (index, label) ->
-                            Key(label, accent = true, desc = "拡張キー: $label", modifier = Modifier.weight(1f)) { onExtKey(index) }
-                        }
-                    }
-                }
-                if (showExtCommands) TextButton(onClick = {
-                    hapticView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    onDismiss()
-                    onExtCommands()
-                }) { Text("拡張コマンド") }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
-    )
 }

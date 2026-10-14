@@ -89,7 +89,7 @@ fun ExtGenerateSheet(ext: SessionExt, hostId: String, app: App, initialName: Str
         dragHandle = { BottomSheetDefaults.DragHandle(color = CyanVeil.Border) }) {
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("拡張の作成", fontSize = 23.sp, fontWeight = FontWeight.Medium)
+            Text("拡張を作る", fontSize = 23.sp, fontWeight = FontWeight.Medium)
             val hostName = remember(hostId) { app.hosts.get(hostId)?.displayName }
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("接続先ホストの AI エージェントが拡張を作成します" + (hostName?.let { "($it)" } ?: ""),
@@ -119,7 +119,8 @@ fun ExtGenerateSheet(ext: SessionExt, hostId: String, app: App, initialName: Str
             OutlinedTextField(name, { name = it.trim() }, singleLine = true, label = { Text("ファイル名") },
                 suffix = { if (!name.endsWith(".lua")) Text(".lua") }, isError = name.isNotBlank() && !nameValid,
                 modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(request, { request = it }, label = { Text("やりたいこと") }, minLines = 3, maxLines = 8,
+            OutlinedTextField(request, { request = it }, label = { Text("やりたいこと") },
+                placeholder = { Text("例: git status を実行するボタン / ビルドが失敗したら通知", color = CyanVeil.Muted) }, minLines = 3, maxLines = 8,
                 modifier = Modifier.fillMaxWidth())
             FilledTonalButton(onClick = {
                 app.hosts.get(hostId)?.let { latest ->
@@ -145,6 +146,18 @@ fun ExtGenerateSheet(ext: SessionExt, hostId: String, app: App, initialName: Str
 }
 
 /** Summary line, usage bullets and detected-feature chips for a script (shared by the sheet and the result dialog). */
+/** スクリプトが提供するものを示す小さなタグ(⚡マクロ N / 自動処理 / 返信候補)。何も無ければ描画しない。 */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ExtTags(s: ExtSummary, modifier: Modifier = Modifier) {
+    if (s.macroCount == 0 && !s.hasAutomation && !s.hasQuickReplies) return
+    FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (s.macroCount > 0) StatusPill("⚡マクロ ${s.macroCount}", CyanVeil.Cyan)
+        if (s.hasAutomation) StatusPill("自動処理", CyanVeil.Amber)
+        if (s.hasQuickReplies) StatusPill("返信候補", CyanVeil.Mint)
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ExtSummaryContent(fileName: String, s: ExtSummary, done: Boolean = false) {
@@ -156,12 +169,12 @@ fun ExtSummaryContent(fileName: String, s: ExtSummary, done: Boolean = false) {
         if (s.summary != null) Text(fileName, color = CyanVeil.Muted, fontSize = 12.sp)
         s.usage.forEach { Text("・$it", fontSize = 13.sp, color = CyanVeil.Text) }
         if (s.hasFeatures) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (s.keys.isNotEmpty()) StatusPill("キー: " + s.keys.joinToString(", "))
-            if (s.commands.isNotEmpty()) StatusPill("コマンド: " + s.commands.joinToString(", "))
-            if (s.triggers > 0) StatusPill("トリガー ×${s.triggers}", CyanVeil.Amber)
-            if (s.quickReplies > 0) StatusPill("クイック返信 ×${s.quickReplies}", CyanVeil.Mint)
-            if (s.timers > 0) StatusPill("タイマー ×${s.timers}", CyanVeil.Amber)
-            if (s.events.isNotEmpty()) StatusPill("イベント: " + s.events.joinToString(", "), CyanVeil.Muted)
+            if (s.keys.isNotEmpty()) StatusPill("マクロ: " + s.keys.joinToString(", "))
+            if (s.commands.isNotEmpty()) StatusPill("マクロ: " + s.commands.joinToString(", "))
+            if (s.triggers > 0) StatusPill("自動処理(出力) ×${s.triggers}", CyanVeil.Amber)
+            if (s.quickReplies > 0) StatusPill("返信候補 ×${s.quickReplies}", CyanVeil.Mint)
+            if (s.timers > 0) StatusPill("自動処理(タイマー) ×${s.timers}", CyanVeil.Amber)
+            if (s.events.isNotEmpty()) StatusPill("自動処理(イベント): " + s.events.joinToString(", "), CyanVeil.Muted)
         }
     }
 }

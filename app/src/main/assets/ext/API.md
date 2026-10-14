@@ -5,6 +5,8 @@ You (an AI coding agent) can customize the Veildeck Android app by writing Lua f
 
 Host script sync/generation currently requires a POSIX shell and utilities (`sh`, `cksum`, `cat`, `base64`, etc.). Native Windows PowerShell-only hosts are not supported by that workflow; a POSIX environment such as a WSL SSH endpoint is needed. The input methods below do not switch newline conventions based on OS.
 
+Note: `keys.add(...)` keys and `command(...)` commands both appear to the user as "macros" (⚡ buttons in the app's mini key row).
+
 ## Reload loop
 1. Edit or create `~/.config/androidterminal/<name>.lua` (name: letters, digits, `_`, `-`, `.`; ends with `.lua`).
 2. The app polls this directory about every 3 seconds (`cksum`) and reloads when something changed.

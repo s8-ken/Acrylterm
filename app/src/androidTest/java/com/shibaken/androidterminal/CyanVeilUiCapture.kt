@@ -209,13 +209,10 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
             }
         }
         verifyFlickKey(activity)
-        click("メニュー")
-        click("その他のキー")
-        for (label in listOf("HOME", "END", "PGUP", "PGDN", "右矢印")) {
+        for (label in listOf("HOME", "END", "PGUP", "PGDN")) {
             awaitNode { it.text?.toString() == label || it.contentDescription?.toString() == label }
         }
         capture("controls-more-keys")
-        click("閉じる")
         click("キーボードの表示/非表示")
         awaitCondition { imeVisible(activity) }
         verifyControlsFit()
@@ -581,19 +578,11 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
 
         awaitCondition { extensions.engine.registry.value.commands.any { it.name == "UI 動作確認" } }
         click("セッションを開く")
-        click("メニュー")
-        click("その他のキー")
-        click("拡張コマンド")
-        awaitNode { it.text?.toString() == "UI 動作確認" }
-        capture("extension-commands")
-        click("UI 動作確認")
+        click("マクロ: UI 動作確認")
         awaitCondition { extensions.log.value.any { "CYAN_UI_COMMAND" in it } }
-        click("メニュー")
-        click("その他のキー")
-        click("拡張キー: 確認")
+        click("マクロ: 確認")
         awaitCondition { extensions.log.value.any { "CYAN_UI_KEY" in it } }
         capture("extension-keys")
-        click("閉じる")
 
         click("メニュー")
         click("ホスト一覧")
