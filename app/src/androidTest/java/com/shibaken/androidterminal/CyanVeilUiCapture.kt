@@ -125,7 +125,7 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
             awaitNode { it.text?.toString() == "3 個のタブ" }
             click("一覧を閉じる")
             click("メニュー")
-            click("ワークスペースを開く")
+            click("ワークスペース一覧")
             awaitNode { it.text?.toString() == "Development" }
             capture("workspaces")
             instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
@@ -211,10 +211,10 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
         click("メニュー")
         check(find { it.text?.toString() == "メッセージを作成" } == null)
         check(find { it.text?.toString()?.contains("直接入力") == true } == null)
-        check(find { it.text?.toString() == "切断" || it.text?.toString() == "セッションを閉じる" } == null)
-        awaitNode { it.text?.toString() == "接続を閉じる" }
+        check(find { it.text?.toString() == "セッションを閉じる" } == null)
+        awaitNode { it.text?.toString() == "切断" }
         capture("terminal-menu")
-        click("接続を閉じる")
+        click("切断")
         awaitNode { it.text?.toString() == "接続を閉じますか？" }
         capture("close-connection-confirm")
         click("キャンセル")

@@ -89,7 +89,7 @@ fun ExtGenerateSheet(ext: SessionExt, hostId: String, app: App, initialName: Str
         dragHandle = { BottomSheetDefaults.DragHandle(color = CyanVeil.Border) }) {
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("拡張を作成", fontSize = 23.sp, fontWeight = FontWeight.Medium)
+            Text("拡張の作成", fontSize = 23.sp, fontWeight = FontWeight.Medium)
             val hostName = remember(hostId) { app.hosts.get(hostId)?.displayName }
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("接続先ホストの AI エージェントが拡張を作成します" + (hostName?.let { "($it)" } ?: ""),

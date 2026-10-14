@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -43,6 +44,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.FullscreenExit
@@ -80,6 +94,8 @@ import com.shibaken.androidterminal.session.GenState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.graphics.graphicsLayer
@@ -141,7 +157,6 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     var modTick by remember { mutableIntStateOf(0) }
     val modifiers = remember { Modifiers { modTick++ } }
     var directInput by remember { mutableStateOf(false) }
-    var menu by remember { mutableStateOf(false) }
     var confirmClosePane by remember { mutableStateOf(false) }
     var confirmCloseConnection by remember { mutableStateOf(false) }
     var terminalFullscreen by rememberSaveable(sessionId) { mutableStateOf(false) }
@@ -226,6 +241,25 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     }
     val imeVisible = WindowInsets.isImeVisible
 
+    // The composer sheet is a separate window: its appearance and the IME it raises used to shrink the
+    // terminal (resize -> reflow + window-change to the remote -> full redraw, twice per open/close). Keep the
+    // terminal's height frozen while the sheet is up and until its IME has gone away again.
+    var composerHold by remember { mutableStateOf(false) }
+    LaunchedEffect(showComposer) { if (showComposer) composerHold = true }
+    // Release only once the IME has stayed hidden for a moment: on dismissal the main window reports a transient
+    // "IME hidden" (inset 0) before the real hide animation starts, and releasing then resizes the terminal ~15 times.
+    LaunchedEffect(showComposer, imeVisible) {
+        if (!showComposer && !imeVisible) { kotlinx.coroutines.delay(600); composerHold = false }
+    }
+    val imeLive = WindowInsets.ime
+    val freezeTerminalHeight = showComposer || composerHold
+    // IME state as the layout sees it: also frozen, because rows that hide while the IME is up change the terminal's height.
+    val imeInsets = remember { FreezableImeInsets(imeLive) }
+    SideEffect { imeInsets.frozen = freezeTerminalHeight }
+    val imeHolder = remember { booleanArrayOf(imeVisible) }
+    if (!freezeTerminalHeight) imeHolder[0] = imeVisible
+    val imeForLayout = imeHolder[0]
+
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
@@ -271,38 +305,47 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
             Modifier
                 .fillMaxSize()
                 .then(if (fullscreen) Modifier.windowInsetsPadding(WindowInsets.displayCutout) else Modifier.systemBarsPadding())
-                .imePadding()
+                .windowInsetsPadding(imeInsets)
         ) {
         Column(Modifier.fillMaxSize()
             .then(if (showOverview) Modifier.clearAndSetSemantics { } else Modifier)
             .padding(horizontal = if (fullscreen) 0.dp else 12.dp, vertical = if (fullscreen) 0.dp else 8.dp),
             verticalArrangement = Arrangement.spacedBy(if (fullscreen) 0.dp else 8.dp)) {
             val sessionMenu: @Composable () -> Unit = {
+                // Local state: opening the menu recomposes only this small scope, not the whole screen.
+                var menu by remember { mutableStateOf(false) }
                 Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "メニュー") }
                     DropdownMenu(menu, { menu = false }) {
-                        DropdownMenuItem(text = { Text("ホスト一覧") }, onClick = { menu = false; onBack() })
+                        val tint = CyanVeil.Muted
+                        @Composable fun Item(label: String, icon: ImageVector, onClick: () -> Unit) =
+                            DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(icon, null, tint = tint) }, onClick = { menu = false; onClick() })
+                        Item("ホスト一覧", Icons.AutoMirrored.Filled.ArrowBack) { onBack() }
                         if (herdr != null) {
-                            DropdownMenuItem(text = { Text("ワークスペースを開く") }, onClick = { menu = false; scope.launch { drawerState.open() } })
-                            DropdownMenuItem(text = { Text("タブ一覧") }, onClick = { menu = false; showOverview = true })
+                            Item("ワークスペース一覧", Icons.Filled.Menu) { scope.launch { drawerState.open() } }
+                            Item("タブ一覧", Icons.Filled.GridView) { showOverview = true }
+                            Item("セッション一覧", Icons.Filled.Dns) { showSessionPicker = true; session.refreshHerdrSessions() }
                         }
-                        DropdownMenuItem(text = { Text("設定") }, onClick = { menu = false; onAppearance() })
                         if (extensionsEnabled && session.profile.extEnabled) {
-                            DropdownMenuItem(text = { Text("拡張を再読込") }, onClick = { session.reloadExtensions(fetch = true); menu = false })
+                            HorizontalDivider()
+                            if (extRt != null) Item("拡張一覧", Icons.AutoMirrored.Filled.ViewList) { showExtRunning = true }
+                            if (session.profile.extLoadFromHost && extRt != null) {
+                                Item("拡張の作成", Icons.Filled.AutoAwesome) { extGenerateName = ""; extGenerateRequest = ""; extGenerateAgent = ""; showExtGenerate = true }
+                            }
+                            Item("拡張の再読込", Icons.Filled.Refresh) { session.reloadExtensions(fetch = true) }
                         }
-                        if (extensionsEnabled && session.profile.extEnabled && extRt != null) {
-                            DropdownMenuItem(text = { Text("動作中の拡張") }, onClick = { showExtRunning = true; menu = false })
+                        HorizontalDivider()
+                        // Stays open so the size can be adjusted repeatedly.
+                        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.TextFields, null, tint = tint)
+                            Text("文字サイズ", Modifier.weight(1f).padding(start = 12.dp), style = MaterialTheme.typography.bodyLarge)
+                            IconButton(onClick = { activeView.textSizeSp -= 1f }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.Remove, "文字を小さく", tint = CyanVeil.Cyan) }
+                            IconButton(onClick = { activeView.textSizeSp += 1f }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.Add, "文字を大きく", tint = CyanVeil.Cyan) }
                         }
-                        if (extensionsEnabled && session.profile.extEnabled && session.profile.extLoadFromHost && extRt != null) {
-                            DropdownMenuItem(text = { Text("拡張を作成") }, onClick = { extGenerateName = ""; extGenerateRequest = ""; extGenerateAgent = ""; showExtGenerate = true; menu = false })
-                        }
-                        DropdownMenuItem(text = { Text("貼り付け") }, onClick = { pasteTarget?.pasteFromClipboard(); menu = false })
-                        DropdownMenuItem(text = { Text("文字を大きく") }, onClick = { activeView.textSizeSp += 1f; menu = false })
-                        DropdownMenuItem(text = { Text("文字を小さく") }, onClick = { activeView.textSizeSp -= 1f; menu = false })
-                        if (state is ConnState.Disconnected) {
-                            DropdownMenuItem(text = { Text("再接続") }, onClick = { session.connect(); menu = false })
-                        }
-                        DropdownMenuItem(text = { Text("接続を閉じる") }, onClick = { menu = false; confirmCloseConnection = true })
+                        Item("設定", Icons.Filled.Tune) { onAppearance() }
+                        HorizontalDivider()
+                        if (state is ConnState.Disconnected) Item("再接続", Icons.Filled.Refresh) { session.connect() }
+                        Item("切断", Icons.Filled.LinkOff) { confirmCloseConnection = true }
                     }
                 }
             }
@@ -428,7 +471,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                     ) }
                     val waiting = herdrState.tabs.firstOrNull { tab -> tab.tabId != herdrState.focusedTabId &&
                         herdrState.panes.any { it.tabId == tab.tabId && it.agentStatus == AgentStatus.BLOCKED } }
-                    if (!fullscreen && !imeVisible && waiting != null) Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
+                    if (!fullscreen && !imeForLayout && waiting != null) Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
                         .background(CyanVeil.Raised).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("! ${waiting.title} が入力待ち", Modifier.weight(1f), color = CyanVeil.Amber, style = MaterialTheme.typography.labelSmall,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -443,7 +486,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
             if (!fullscreen && herdr != null && herdrState.phase == HerdrState.Phase.READY) {
                 if (!isPanes) HerdrTabStrip(herdrState, herdr, onOpenOverview = { showOverview = true }, menu = {})
                 // Legacy TUI mode only (native panes need none); hidden while the IME is up to leave rows for the terminal.
-                if (!isPanes && !imeVisible) {
+                if (!isPanes && !imeForLayout) {
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -476,7 +519,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                 showExtCommands = extensionsEnabled && extRegistry != null && extRegistry.commands.isNotEmpty(),
                 onExtCommands = { showExtCommands = true },
             )
-            if (!fullscreen && isPanes && !imeVisible) {
+            if (!fullscreen && isPanes && !imeForLayout) {
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(100.dp)).background(CyanVeil.Surface)
                     .clickable { showComposer = true }.semantics { contentDescription = "返信を作成" }
                     .padding(horizontal = 12.dp, vertical = 12.dp),
@@ -501,7 +544,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
         SnackbarHost(snackbarHost, Modifier.align(Alignment.BottomCenter).zIndex(3f).padding(bottom = 96.dp))
         // Extension generation activity: bottom-right edge, above the extra-keys bar (and composer pill).
         if (extensionsEnabled && !fullscreen && (extGenState !is GenState.Idle || extFlying)) {
-            Box(Modifier.align(Alignment.BottomEnd).zIndex(2f).padding(end = 12.dp, bottom = if (isPanes && !imeVisible) 120.dp else 64.dp)
+            Box(Modifier.align(Alignment.BottomEnd).zIndex(2f).padding(end = 12.dp, bottom = if (isPanes && !imeForLayout) 120.dp else 64.dp)
                 .size(48.dp).onGloballyPositioned { extBadgePos = it.positionInWindow() }) {
                 if (!extFlying) ExtActivityBadge(extGenState, onClick = {
                     if (extGenState is GenState.Running) {
@@ -531,6 +574,35 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
             } else extFlying = false
         }
         }
+        if (showComposer && herdr != null) {
+        val pid = herdrState.focusedPaneId
+        if (pid == null) {
+            showComposer = false
+        } else {
+            key(pid) {
+                ComposerPanel(
+                    draftKey = "${session.id}/$pid",
+                    onSend = { t ->
+                        val bt = paneTerminals[pid]
+                        if (bt != null && bt.attached.value) {
+                            // paste() wraps in bracketed paste when the app enabled it and normalises newlines.
+                            bt.emulator.paste(t)
+                            delay(40) // keep the paste end and Enter in separate writes
+                            bt.sendText("\r")
+                            true
+                        } else {
+                            herdr.sendInputChecked(pid, t.replace("\r\n", "\r").replace('\n', '\r'), listOf("enter"))
+                        }
+                    },
+                    onDismiss = {
+                        showComposer = false
+                        activeView.post { activeView.requestFocus() }
+                    },
+                )
+            }
+        }
+    }
+
         }
     }
 
@@ -605,35 +677,6 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                 extRt?.clearGenState(); showExtGenerate = true })
     }
 
-    if (showComposer && herdr != null) {
-        val pid = herdrState.focusedPaneId
-        if (pid == null) {
-            showComposer = false
-        } else {
-            key(pid) {
-                ComposerSheet(
-                    draftKey = "${session.id}/$pid",
-                    onSend = { t ->
-                        val bt = paneTerminals[pid]
-                        if (bt != null && bt.attached.value) {
-                            // paste() wraps in bracketed paste when the app enabled it and normalises newlines.
-                            bt.emulator.paste(t)
-                            delay(40) // keep the paste end and Enter in separate writes
-                            bt.sendText("\r")
-                            true
-                        } else {
-                            herdr.sendInputChecked(pid, t.replace("\r\n", "\r").replace('\n', '\r'), listOf("enter"))
-                        }
-                    },
-                    onDismiss = {
-                        showComposer = false
-                        activeView.post { activeView.requestFocus() }
-                    },
-                )
-            }
-        }
-    }
-
     if (confirmClosePane && herdr != null) {
         val pane = herdrState.pane(herdrState.focusedPaneId)
         AlertDialog(
@@ -649,4 +692,17 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
             dismissButton = { TextButton(onClick = { confirmClosePane = false }) { Text("キャンセル") } },
         )
     }
+}
+
+/**
+ * IME insets that stop following the keyboard while [frozen] (the last value is kept). Reads are observed by the
+ * layout phase, so unfreezing re-lays out.
+ */
+private class FreezableImeInsets(private val live: WindowInsets) : WindowInsets {
+    var frozen by mutableStateOf(false)
+    private var cached = 0
+    override fun getBottom(density: Density): Int = if (frozen) cached else live.getBottom(density).also { cached = it }
+    override fun getTop(density: Density): Int = 0
+    override fun getLeft(density: Density, layoutDirection: LayoutDirection): Int = 0
+    override fun getRight(density: Density, layoutDirection: LayoutDirection): Int = 0
 }

@@ -149,6 +149,7 @@ class TerminalCanvasView @JvmOverloads constructor(
         isFocusable = true
         isFocusableInTouchMode = true
         keepScreenOn = true
+        defaultFocusHighlightEnabled = false // keyboard-driven focus (e.g. after Back) must not tint the whole terminal
     }
 
     private fun spToPx(sp: Float): Int =

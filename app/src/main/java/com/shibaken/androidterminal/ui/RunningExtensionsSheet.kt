@@ -63,7 +63,7 @@ fun RunningExtensionsSheet(ext: SessionExt, session: SshTerminalSession, app: Ap
                     Icon(Icons.Filled.Code, null, tint = CyanVeil.Cyan)
                 }
                 Column(Modifier.weight(1f)) {
-                    Text("動作中の拡張", fontSize = 23.sp, fontWeight = FontWeight.Medium)
+                    Text("拡張一覧", fontSize = 23.sp, fontWeight = FontWeight.Medium)
                     Text(profile.displayName + " のみ切り替え", color = CyanVeil.Muted, fontSize = 11.sp)
                 }
                 StatusPill("${entries.count { it.loadName !in disabled }} / ${entries.size}")

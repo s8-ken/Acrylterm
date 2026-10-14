@@ -66,7 +66,7 @@ Android アプリ
   - 2 本指の水平スワイプ: 前 / 次のタブ。ピンチとは「重心の水平移動量」と「指の間隔の変化」で区別する(`PaneGestureMath`)
   - 区切り線: 24dp の透明なドラッグ領域。ドラッグ中はレイアウトを即時に更新し、指を離したときに `layout.set_split_ratio`(`tab_id` + 根からの `path`)で確定する。`path` は分割の矩形の包含関係から求める(`PaneLogic.splitPath`)
 - 入力待ちのペイン: ペイン下端に `QuickReplyBar`(`pane.read` の末尾 15 行から選択肢を推定。`QuickReplies.parse`)。状態が変わると消える
-- 作成欄: `ComposerSheet`(ボトムシート)。下書きはペインごとにメモリ上で保持し、送信は `pane.send_input`(テキスト + Enter)
+- 作成欄: `ComposerPanel`(IME 直上に固定するインライン入力パネル。ボトムシートは使わない)。下書きはペインごとにメモリ上で保持し、送信は `pane.send_input`(テキスト + Enter)
 - 一覧: `PaneOverview`。全ワークスペースの全タブを、`TabLayout` の矩形を縮小したカードで表示する(エージェント状態を色と形で示す)
 - ユーザー向けの文言に「herdr」は出さない(通知・ドロワー・ホスト設定を含む)
 
@@ -79,7 +79,7 @@ Android アプリ
 - ホストのスクリプト(`extLoadFromHost`): 接続時に `sh -c` で `~/.config/androidterminal/*.lua` を 1 回の exec で取得して `filesDir/ext/hosts/<id>/` にキャッシュ。接続中は 3 秒ごとの `cksum` で変更検知→再取得→再読込。`.app/API.md`・`.app/log.txt` へ base64 経由で書き戻す(親ディレクトリが無ければ作らない)
 - 出力トリガー: トリガー登録があるときだけ各 `PaneTerminal.screenRevision`(200ms デバウンス)から表示行を読み、変化行を `OutputWatcher` → `ExtEngine.dispatchOutput`
 - エージェント状態: `HerdrController.onAgentTransition`(全遷移)→ `dispatchAgentStatus`。既存の通知(`AgentAlertListener`)とは独立
-- UI: `ExtraKeysBar` の末尾に `ExtRegistry.keys`、`QuickReplyBar` は `matchQuickReply` を優先、`TerminalScreen` のメニューに「拡張コマンド」「拡張を再読込」、ホスト一覧のメニューから `ExtScriptsScreen`(全体スクリプトの編集。保存で稼働中セッションを再読込)
+- UI: `ExtraKeysBar` の末尾に `ExtRegistry.keys`、`QuickReplyBar` は `matchQuickReply` を優先、`TerminalScreen` のメニューに「拡張コマンド」「拡張の再読込」、ホスト一覧のメニューから `ExtScriptsScreen`(全体スクリプトの編集。保存で稼働中セッションを再読込)
 - 通知は `SessionManager.notify`(エージェント通知と同じチャンネル・タップでペインを開く)
 
 ## 既知の制限・今後
