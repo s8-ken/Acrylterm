@@ -36,6 +36,32 @@ class ExtSyncTest {
         assertTrue(ExtSync.CKSUM.contains("cksum"))
     }
 
+    private fun runSh(home: java.io.File, cmd: String): String {
+        val p = ProcessBuilder("sh", "-c", cmd).apply { environment()["HOME"] = home.path }.redirectErrorStream(true).start()
+        return p.inputStream.bufferedReader().readText().also { p.waitFor() }
+    }
+
+    @Test fun fetchCommand_movesLegacyDirOnce() {
+        val home = kotlin.io.path.createTempDirectory("exthome").toFile()
+        try {
+            val legacy = java.io.File(home, ".config/androidterminal").apply { mkdirs() }
+            java.io.File(legacy, "a.lua").writeText("log('a')")
+            val r = ExtSync.parseBundle(runSh(home, ExtSync.fetchCommand("n1")), "n1")
+            assertEquals(listOf("a.lua"), r.map { it.name })
+            assertTrue(java.io.File(home, ".config/acrylterm/a.lua").isFile)
+            assertTrue(!legacy.exists())
+
+            // When both exist, the new directory wins and the legacy one is left alone.
+            legacy.mkdirs()
+            java.io.File(legacy, "old.lua").writeText("x")
+            val again = ExtSync.parseBundle(runSh(home, ExtSync.fetchCommand("n2")), "n2")
+            assertEquals(listOf("a.lua"), again.map { it.name })
+            assertTrue(java.io.File(legacy, "old.lua").isFile)
+        } finally {
+            home.deleteRecursively()
+        }
+    }
+
     @Test fun writeScriptCommands_mkdirAndMv() {
         val cmds = ExtSync.writeScriptCommands("a.lua", "x".repeat(100), chunkBytes = 40)
         assertEquals(3, cmds.size)
@@ -58,7 +84,7 @@ class ExtSyncTest {
         assertTrue(p.contains("k.lua") && p.contains("API-DOC") && p.contains("add a key"))
         assertTrue(p.contains("Output ONLY the complete Lua source code"))
         assertTrue(!p.contains("Modify this script"))
-        assertTrue(p.contains("--[[veildeck\nsummary:") && p.contains("\nusage:\n- "))
+        assertTrue(p.contains("--[[acrylterm\nsummary:") && p.contains("\nusage:\n- "))
         assertTrue(p.contains("same language as the user's request"))
         assertTrue(!p.contains("Update the header too"))
         val m = ExtSync.generatePrompt("k.lua", "fix", "API-DOC", "log('old')")

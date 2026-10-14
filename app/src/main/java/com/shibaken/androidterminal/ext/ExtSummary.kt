@@ -1,6 +1,6 @@
 package com.shibaken.androidterminal.ext
 
-/** Lua 拡張の要約。先頭の `--[[veildeck … ]]` ヘッダと静的解析から作る(純ロジック)。 */
+/** Lua 拡張の要約。先頭の `--[[acrylterm … ]]`(旧 `--[[veildeck`)ヘッダと静的解析から作る(純ロジック)。 */
 data class ExtSummary(
     val summary: String?,
     val usage: List<String>,
@@ -24,7 +24,7 @@ data class ExtSummary(
     val hasQuickReplies: Boolean get() = quickReplies > 0
 
     companion object {
-        private val HEADER = Regex("""\A\s*--\[\[veildeck[ \t]*\r?\n?(.*?)\]\]""", RegexOption.DOT_MATCHES_ALL)
+        private val HEADER = Regex("""\A\s*--\[\[(?:acrylterm|veildeck)[ \t]*\r?\n?(.*?)\]\]""", RegexOption.DOT_MATCHES_ALL)
         private val KEY = Regex("""(?<![A-Za-z0-9_.])keys\s*\.\s*add\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')""")
         private val COMMAND = Regex("""(?<![A-Za-z0-9_.:])command\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')""")
         private val EVENT = Regex("""(?<![\w.:])on\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')""")

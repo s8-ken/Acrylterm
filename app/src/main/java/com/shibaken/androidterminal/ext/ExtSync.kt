@@ -3,28 +3,32 @@ package com.shibaken.androidterminal.ext
 import java.util.Base64
 
 /**
- * ホストの `~/.config/androidterminal/` とのやり取りに使うコマンド生成とパースの純ロジック(ユニットテスト対象)。
+ * ホストの `~/.config/acrylterm/` とのやり取りに使うコマンド生成とパースの純ロジック(ユニットテスト対象)。
  * 全コマンドは `sh -c '…'` で包んで実行する想定(ログインシェルが fish 等でも動くように)。
  */
 object ExtSync {
     fun newNonce(): String = java.util.UUID.randomUUID().toString().replace("-", "")
 
     private fun marker(nonce: String) = "--@@FILE:$nonce "
-    private const val DIR = "\$HOME/.config/androidterminal"
+    private const val DIR = "\$HOME/.config/acrylterm"
+    private const val LEGACY_DIR = "\$HOME/.config/androidterminal"
+
+    /** 旧ディレクトリだけがあれば新しい名前へ移す(1 回きり。以降は何もしない)。 */
+    private const val MIGRATE = "[ -e \"$DIR\" ] || [ ! -d \"$LEGACY_DIR\" ] || mv \"$LEGACY_DIR\" \"$DIR\"; "
 
     /** Runs [script] under POSIX sh regardless of the user's login shell. */
     fun sh(script: String): String = "sh -c '" + script.replace("'", "'\\''") + "'"
 
     /** 全 `*.lua` を区切り行付きで出力する。一致なしでも成功(空出力)。 */
     fun fetchCommand(nonce: String): String = sh(
-        "d=\"$DIR\"; for f in \"\$d\"/*.lua; do [ -f \"\$f\" ] || continue; " +
+        MIGRATE + "d=\"$DIR\"; for f in \"\$d\"/*.lua; do [ -f \"\$f\" ] || continue; " +
             "printf '\\n${marker(nonce)}%s\\n' \"\${f##*/}\"; cat \"\$f\"; done; true"
     )
 
     /** 変更検知用。一致なし/ディレクトリなしは空出力。 */
-    val CKSUM: String = sh("cksum \"$DIR\"/*.lua 2>/dev/null; true")
+    val CKSUM: String = sh(MIGRATE + "cksum \"$DIR\"/*.lua 2>/dev/null; true")
 
-    /** `~/.config/androidterminal/<name>` を消す(無ければ成功扱い)。 */
+    /** `~/.config/acrylterm/<name>` を消す(無ければ成功扱い)。 */
     fun deleteCommand(name: String): String {
         require(ScriptStore.isValidName(name)) { "invalid script name: $name" }
         return sh("rm -f \"$DIR/$name\"")
@@ -47,7 +51,7 @@ object ExtSync {
     }
 
     /**
-     * `~/.config/androidterminal/.app/<name>` を書くコマンド列(順に実行する)。親ディレクトリが無ければ何もしない(失敗扱いにしない)。
+     * `~/.config/acrylterm/.app/<name>` を書くコマンド列(順に実行する)。親ディレクトリが無ければ何もしない(失敗扱いにしない)。
      * 1 コマンドあたり base64 で約 [chunkBytes]*4/3 バイト。先頭は上書き、以降は追記。
      */
     fun writeCommands(name: String, text: String, chunkBytes: Int = 45_000): List<String> {
@@ -60,14 +64,14 @@ object ExtSync {
     }
 
     /**
-     * `~/.config/androidterminal/<name>` を書くコマンド列(順に実行する)。ディレクトリは `mkdir -p` で作る。
+     * `~/.config/acrylterm/<name>` を書くコマンド列(順に実行する)。ディレクトリは `mkdir -p` で作る。
      * 一時ファイル(`.app/<name>.part`)に書き、最後のチャンクで `mv` するので、ポーリングが書きかけを取り込まない。
      */
     fun writeScriptCommands(name: String, text: String, chunkBytes: Int = 45_000): List<String> {
         require(ScriptStore.isValidName(name)) { "invalid script name: $name" }
         return chunkCommands(text, chunkBytes) { i, last, b64 ->
             val redir = if (i == 0) ">" else ">>"
-            "d=\"$DIR\"; mkdir -p \"\$d/.app\" || exit 1; " +
+            MIGRATE + "d=\"$DIR\"; mkdir -p \"\$d/.app\" || exit 1; " +
                 "printf %s '$b64' | { base64 -d 2>/dev/null || base64 -D; } $redir \"\$d/.app/$name.part\"" +
                 (if (last) " && mv -f \"\$d/.app/$name.part\" \"\$d/$name\"" else "")
         }
@@ -81,7 +85,7 @@ object ExtSync {
 
     /** AI CLI に渡すプロンプト。[existing] があれば修正依頼になる。 */
     fun generatePrompt(name: String, request: String, apiDoc: String, existing: String?): String = buildString {
-        appendLine("You are writing a Lua extension script for the Veildeck Android terminal app.")
+        appendLine("You are writing a Lua extension script for the Acrylterm Android terminal app.")
         appendLine("The script file name is: $name")
         appendLine()
         appendLine("The API reference follows between the markers.")
@@ -100,7 +104,7 @@ object ExtSync {
         appendLine(request.trim())
         appendLine()
         appendLine("The script MUST begin with a header comment block exactly in this form:")
-        appendLine("--[[veildeck")
+        appendLine("--[[acrylterm")
         appendLine("summary: <one line: what it does>")
         appendLine("usage:")
         appendLine("- <how to use, one bullet per line>")

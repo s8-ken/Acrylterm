@@ -20,6 +20,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Veildeck"
+rootProject.name = "Acrylterm"
 include(":app")
 include(":terminal-emulator")

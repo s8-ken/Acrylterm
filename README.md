@@ -1,8 +1,8 @@
-# Veildeck
+# Acrylterm
 
-Veildeck（ヴェイルデック）は、自宅の Mac mini に Tailscale 経由で SSH 接続するための Android ターミナルアプリ。
+Acrylterm（アクリルターム）は、自宅の Mac mini に Tailscale 経由で SSH 接続するための Android ターミナルアプリ。
 
-アイコンの原稿・Figma リンクは [design/veildeck/](design/veildeck/README.md) にあります。
+アイコンの原稿・Figma リンクは [design/acrylterm/](design/acrylterm/README.md) にあります。
 
 - **日本語入力**:IME の未確定文字列(変換中の文字)をカーソル位置に表示し、確定した文字列だけを送信する
 - **Cyan Veil UI**:黒緑・シアンの配色、丸みのあるカードと操作ボタン。外観設定でターミナル背景の透明度と壁紙のぼかしを調整

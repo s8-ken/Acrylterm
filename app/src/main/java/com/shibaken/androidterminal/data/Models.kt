@@ -27,7 +27,7 @@ data class HostProfile(
     val useMosh: Boolean = false,
     /** Run Lua extension scripts in this host's sessions. */
     val extEnabled: Boolean = false,
-    /** Also load scripts from the host's config directory (androidterminal under .config) on connect. */
+    /** Also load scripts from the host's config directory (acrylterm under .config; a legacy androidterminal dir is moved there) on connect. */
     val extLoadFromHost: Boolean = false,
     /** Headless AI CLI on the host that writes extensions: gets the prompt on stdin, must print the result on stdout (e.g. `claude -p`, `codex exec -`). */
     val extAgentCommand: String = "claude -p",

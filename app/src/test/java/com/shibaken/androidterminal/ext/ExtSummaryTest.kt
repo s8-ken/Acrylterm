@@ -8,23 +8,28 @@ import org.junit.Test
 
 class ExtSummaryTest {
     @Test fun header_parsed() {
-        val s = ExtSummary.parse("\n\n--[[veildeck\nsummary: git status を送る\nusage:\n- gst キーを押す\n- /x を実行\n]]\nlog('a')")
+        val s = ExtSummary.parse("\n\n--[[acrylterm\nsummary: git status を送る\nusage:\n- gst キーを押す\n- /x を実行\n]]\nlog('a')")
         assertEquals("git status を送る", s.summary)
         assertEquals(listOf("gst キーを押す", "/x を実行"), s.usage)
     }
 
+    @Test fun legacy_header_parsed() {
+        val s = ExtSummary.parse("--[[veildeck\nsummary: old\n]]")
+        assertEquals("old", s.summary)
+    }
+
     @Test fun header_absent_or_not_first() {
         assertNull(ExtSummary.parse("log('x')").summary)
-        val s = ExtSummary.parse("log('x')\n--[[veildeck\nsummary: late\n]]")
+        val s = ExtSummary.parse("log('x')\n--[[acrylterm\nsummary: late\n]]")
         assertNull(s.summary)
         assertTrue(s.usage.isEmpty())
     }
 
     @Test fun header_malformed_is_lenient() {
-        val unclosed = ExtSummary.parse("--[[veildeck\nsummary: oops\nkeys.add(\"a\", f)")
+        val unclosed = ExtSummary.parse("--[[acrylterm\nsummary: oops\nkeys.add(\"a\", f)")
         assertNull(unclosed.summary)
         assertTrue(unclosed.keys.isEmpty()) // unclosed block comment swallows the rest, as Lua would
-        val noSummary = ExtSummary.parse("--[[veildeck\nusage:\n* one\n]]")
+        val noSummary = ExtSummary.parse("--[[acrylterm\nusage:\n* one\n]]")
         assertNull(noSummary.summary)
         assertEquals(listOf("one"), noSummary.usage)
     }

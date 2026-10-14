@@ -94,7 +94,7 @@ fun ExtGenerateSheet(ext: SessionExt, hostId: String, app: App, initialName: Str
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("接続先ホストの AI エージェントが拡張を作成します" + (hostName?.let { "($it)" } ?: ""),
                     color = CyanVeil.Muted, fontSize = 12.sp)
-                Text("保存先: ~/.config/androidterminal/", color = CyanVeil.Muted, fontSize = 12.sp,
+                Text("保存先: ~/.config/acrylterm/", color = CyanVeil.Muted, fontSize = 12.sp,
                     fontFamily = FontFamily.Monospace)
             }
             val kinds = ExtAgents.Kind.entries

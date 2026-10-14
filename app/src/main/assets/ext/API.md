@@ -1,16 +1,16 @@
-# Veildeck extension API (Lua)
+# Acrylterm extension API (Lua)
 
-You (an AI coding agent) can customize the Veildeck Android app by writing Lua files into
-`~/.config/androidterminal/*.lua` on this machine. No install is needed on the PC side.
+You (an AI coding agent) can customize the Acrylterm Android app by writing Lua files into
+`~/.config/acrylterm/*.lua` on this machine. No install is needed on the PC side.
 
 Host script sync/generation currently requires a POSIX shell and utilities (`sh`, `cksum`, `cat`, `base64`, etc.). Native Windows PowerShell-only hosts are not supported by that workflow; a POSIX environment such as a WSL SSH endpoint is needed. The input methods below do not switch newline conventions based on OS.
 
 Note: `keys.add(...)` keys and `command(...)` commands both appear to the user as "macros" (⚡ buttons in the app's mini key row).
 
 ## Reload loop
-1. Edit or create `~/.config/androidterminal/<name>.lua` (name: letters, digits, `_`, `-`, `.`; ends with `.lua`).
+1. Edit or create `~/.config/acrylterm/<name>.lua` (name: letters, digits, `_`, `-`, `.`; ends with `.lua`).
 2. The app polls this directory about every 3 seconds (`cksum`) and reloads when something changed.
-3. Check `~/.config/androidterminal/.app/log.txt` for the result: load errors (`name.lua:LINE: message`), uncaught callback errors and everything you `log(...)`. The last 200 lines are kept.
+3. Check `~/.config/acrylterm/.app/log.txt` for the result: load errors (`name.lua:LINE: message`), uncaught callback errors and everything you `log(...)`. The last 200 lines are kept.
 4. If a reload fails, the app keeps the previously working scripts. Fix the error and save again.
 
 Files are loaded in file-name order (after the user's in-app global scripts). Do not touch `.app/` except for reading.
@@ -18,7 +18,7 @@ Files are loaded in file-name order (after the user's in-app global scripts). Do
 ## Header comment (recommended)
 Begin each script with a header so the app can show what it does:
 ```
---[[veildeck
+--[[acrylterm
 summary: <one line: what it does>
 usage:
 - <how to use, one bullet per line>

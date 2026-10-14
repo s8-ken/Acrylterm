@@ -1,6 +1,6 @@
-# Veildeck icon
+# Acrylterm icon
 
-正式表記は **Veildeck**、読みは **ヴェイルデック**。
+正式表記は **Acrylterm**、読みは **アクリルターム**(旧名 Veildeck)。
 
 Cyan Veil UI の黒緑の背景、シアンとミントの光、丸みのあるパネルを重ねたアイコン。前面の `>_` はターミナル、背面のパネルは複数の作業環境を表す。
 

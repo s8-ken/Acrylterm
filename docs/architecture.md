@@ -76,7 +76,7 @@ Android アプリ
 
 - `ext/`: LuaJ ランタイム(`ExtEngine`、専用 1 スレッドで直列化)、API(`ExtApi`)、登録内容(`ExtRegistry`)、`ScriptStore`(`filesDir/ext/`)、`OutputWatcher`(画面差分)、`ExtSync`(ホスト取り込み用コマンドの生成・パース)
 - `session/SessionExt.kt`: セッション 1 つにつき 1 つ。`ExtHost` をセッションに対して実装し(PANES は `HerdrController`、SHELL は単一ペイン `shell`)、接続のたびにスクリプトを再読込して `connected` を発火する
-- ホストのスクリプト(`extLoadFromHost`): 接続時に `sh -c` で `~/.config/androidterminal/*.lua` を 1 回の exec で取得して `filesDir/ext/hosts/<id>/` にキャッシュ。接続中は 3 秒ごとの `cksum` で変更検知→再取得→再読込。`.app/API.md`・`.app/log.txt` へ base64 経由で書き戻す(親ディレクトリが無ければ作らない)
+- ホストのスクリプト(`extLoadFromHost`): 接続時に `sh -c` で `~/.config/acrylterm/*.lua` を 1 回の exec で取得して(旧 `~/.config/androidterminal/` だけがあれば先に移す) `filesDir/ext/hosts/<id>/` にキャッシュ。接続中は 3 秒ごとの `cksum` で変更検知→再取得→再読込。`.app/API.md`・`.app/log.txt` へ base64 経由で書き戻す(親ディレクトリが無ければ作らない)
 - 出力トリガー: トリガー登録があるときだけ各 `PaneTerminal.screenRevision`(200ms デバウンス)から表示行を読み、変化行を `OutputWatcher` → `ExtEngine.dispatchOutput`
 - エージェント状態: `HerdrController.onAgentTransition`(全遷移)→ `dispatchAgentStatus`。既存の通知(`AgentAlertListener`)とは独立
 - UI: `ExtraKeysBar` のミニキー列末尾に `ExtRegistry.keys` と `commands`(⚡ マクロ)と「＋」、`QuickReplyBar` は `matchQuickReply` を優先、`TerminalScreen` のメニューに「拡張一覧」「拡張を作る」「拡張の再読込」(マクロ = keys+commands はミニキー列の ⚡ チップ)、ホスト一覧のメニューから `ExtScriptsScreen`(全体スクリプトの編集。保存で稼働中セッションを再読込)
