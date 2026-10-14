@@ -67,6 +67,7 @@ class TerminalCanvasView @JvmOverloads constructor(
             cancelHistory()
             dropHistoryCache()
             field = value
+            bandTracker.reset(); headerRows = 0; footerRows = 0
             value?.onScreenUpdate = { onScreenUpdated() }
             clearSelection()
             topRow = 0
@@ -186,6 +187,21 @@ class TerminalCanvasView @JvmOverloads constructor(
     private val cellWidth: Float get() = renderer.fontWidth
     private val cellHeight: Int get() = renderer.fontLineSpacing
 
+    private fun trackBand(emu: TerminalEmulator) {
+        val alt = emu.isAlternateBufferActive
+        bandTracker.validateContext(emu.mRows, emu.mColumns, alt)
+        if (!bandTracker.hasProbe) return
+        val now = android.os.SystemClock.uptimeMillis()
+        if (bandTracker.probeExpired(now)) { bandTracker.onRepaint(LongArray(0), emu.mColumns, alt, now); return }
+        bandTracker.onRepaint(RowSig.ofScreen(emu), emu.mColumns, alt, now)
+    }
+
+    /** Called right before wheel events are forwarded: remembers the screen so the next repaint can reveal what scrolled. */
+    private fun probeBand(emu: TerminalEmulator) {
+        if (!mouseActive && !emu.isAlternateBufferActive) return
+        bandTracker.beginProbe(RowSig.ofScreen(emu), emu.mColumns, emu.isAlternateBufferActive, android.os.SystemClock.uptimeMillis())
+    }
+
     private fun onScreenUpdated() {
         // New output snaps back to the live screen unless the user is reading history.
         val emu = session?.emulator ?: return
@@ -196,6 +212,7 @@ class TerminalCanvasView @JvmOverloads constructor(
         }
         emu.clearScrollCounter()
         unackedRows = 0 // the repaint now reflects what was sent
+        trackBand(emu)
         if (selActive && hist == null) shiftSelection(emu, scrolled)
         if (holdActive && !holdInResize) { holdGotOutput = true; holdLastOutputMs = android.os.SystemClock.uptimeMillis() }
         invalidate()
@@ -260,7 +277,8 @@ class TerminalCanvasView @JvmOverloads constructor(
         val gridChanged = cols != emu.mColumns || rows != emu.mRows
         if (gridChanged) {
             clearSelection() // reflow invalidates the coordinates
-            footerRows = 0
+            footerRows = 0; headerRows = 0
+            bandTracker.reset()
             cancelHistory()
             dropHistoryCache() // rebuilt lazily by the next prefetch
             if (holdOldW > 0 && holdOldH > 0) beginHold(holdOldW, holdOldH)
@@ -289,11 +307,13 @@ class TerminalCanvasView @JvmOverloads constructor(
         val sel = if (selActive) selectionBounds() else null
         val sy = sel?.get(0) ?: -1; val sx = sel?.get(1) ?: -1; val ey = sel?.get(2) ?: -1; val ex = sel?.get(3) ?: -1
         val footer = activeFooter()
+        val header = activeHeader()
         val save = canvas.save()
-        if (footer > 0) canvas.clipRect(0, 0, width, contentHeightPx(footer)) // scrolling region only
+        if (footer > 0 || header > 0) canvas.clipRect(0, header * cellHeight, width, contentHeightPx(footer)) // scrolling region only
         drawScrolled(canvas, emu, sy, ey, sx, ex)
         canvas.restoreToCount(save)
         if (footer > 0) drawPinnedFooter(canvas, footer)
+        if (header > 0) drawPinnedHeader(canvas, header)
         if (composingText.isNotEmpty() && scrollPx == 0f && hist == null) drawComposing(canvas, emu)
         if (selActive && !selDragging) drawHandles(canvas)
     }
@@ -326,10 +346,38 @@ class TerminalCanvasView @JvmOverloads constructor(
 
     private fun contentHeightPx(footer: Int): Int = ((session?.emulator?.mRows ?: 0) - footer) * cellHeight
 
+    private var headerRows = 0
+    private val bandTracker = BandTracker()
+
+    /** Picks the fixed header/footer for this gesture: learned band > DECSTBM margins > visual footer heuristics > none. */
     private fun detectFooter() {
         val live = session?.emulator
-        footerRows = if (live != null && mouseActive && hist == null)
+        if (live == null || hist != null || !(mouseActive || live.isAlternateBufferActive)) { footerRows = 0; headerRows = 0; return }
+        bandTracker.validateContext(live.mRows, live.mColumns, live.isAlternateBufferActive)
+        val learned = bandTracker.learned
+        val margins = FixedBands.fromMargins(live.topMargin, live.bottomMargin, live.mRows)
+        // The heuristics are the fallback for the very first gesture only; skip their cost when a better source exists.
+        val heuristic = if (learned == null && margins == null && mouseActive)
             FooterDetector.detectRows(FooterDetector.rowsOf(live), live.cursorRow, live.shouldCursorBeVisible(), live.mColumns) else 0
+        val band = FixedBands.choose(learned, margins, heuristic)
+        headerRows = band.header; footerRows = band.footer
+    }
+
+    /** Header rows to pin right now (not in the history view, whose stitched content scrolls as a whole). */
+    private fun activeHeader(): Int {
+        val h = headerRows
+        if (h <= 0 || hist != null) return 0
+        val live = session?.emulator ?: return 0
+        if (live.mRows <= h + footerRows + 2) return 0
+        return if ((mouseActive || live.isAlternateBufferActive) && remoteOffsetPx() != 0f) h else 0
+    }
+
+    private fun drawPinnedHeader(canvas: Canvas, header: Int) {
+        val live = session?.emulator ?: return
+        val save = canvas.save()
+        canvas.clipRect(0, 0, width, header * cellHeight)
+        renderer.render(live, canvas, 0, header, -1, -1, -1, -1)
+        canvas.restoreToCount(save)
     }
 
     /** Footer rows to pin right now, 0 when the content is not displaced. */
@@ -338,7 +386,7 @@ class TerminalCanvasView @JvmOverloads constructor(
         if (f <= 0) return 0
         val live = session?.emulator ?: return 0
         if (live.mRows <= f + 1) return 0
-        return if (hist != null || (mouseActive && remoteOffsetPx() != 0f)) f else 0
+        return if (hist != null || ((mouseActive || live.isAlternateBufferActive) && remoteOffsetPx() != 0f)) f else 0
     }
 
     private fun drawPinnedFooter(canvas: Canvas, footer: Int) {
@@ -770,6 +818,7 @@ class TerminalCanvasView @JvmOverloads constructor(
             wheelAcc.rowHeight = cellHeight.toFloat()
             val rows = wheelAcc.add(dy, maxRows)
             if (rows != 0) {
+                probeBand(emu)
                 if (mouseActive) {
                     val (c, r) = cellAt(x, y)
                     val button = if (rows > 0) TerminalEmulator.MOUSE_WHEELDOWN_BUTTON else TerminalEmulator.MOUSE_WHEELUP_BUTTON
@@ -1033,7 +1082,8 @@ class TerminalCanvasView @JvmOverloads constructor(
     private fun selCellAt(x: Float, y: Float): Pair<Int, Int> {
         val emu = viewEmulator ?: return 0 to 0
         val footer = activeFooter()
-        val y = if (footer > 0) y.coerceAtMost(contentHeightPx(footer) - 1f) else y // pinned footer rows are not part of the scrolling content
+        val header = activeHeader()
+        val y = if (footer > 0 || header > 0) y.coerceIn(header * cellHeight.toFloat(), contentHeightPx(footer) - 1f) else y // pinned rows are not part of the scrolling content
         val col = (x / cellWidth).toInt().coerceIn(0, emu.mColumns - 1)
         val minRow = -emu.screen.activeTranscriptRows
         val row = (Math.floor((y / cellHeight).toDouble()).toInt() + topRow).coerceIn(minRow, emu.mRows - 1)

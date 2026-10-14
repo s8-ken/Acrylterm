@@ -542,6 +542,16 @@ public final class TerminalEmulator {
         return mScreen == mAltBuffer;
     }
 
+    /** DECSTBM top scroll margin (0-based row; 0 = screen top). */
+    public int getTopMargin() {
+        return mTopMargin;
+    }
+
+    /** DECSTBM bottom scroll margin (0-based, exclusive; mRows = screen bottom). */
+    public int getBottomMargin() {
+        return mBottomMargin;
+    }
+
     private int getTerminalTranscriptRows(Integer transcriptRows) {
         if (transcriptRows == null || transcriptRows < TERMINAL_TRANSCRIPT_ROWS_MIN || transcriptRows > TERMINAL_TRANSCRIPT_ROWS_MAX)
             return DEFAULT_TERMINAL_TRANSCRIPT_ROWS;
