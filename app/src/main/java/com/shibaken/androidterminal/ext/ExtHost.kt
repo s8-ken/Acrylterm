@@ -18,10 +18,19 @@ data class ExtPane(
 interface ExtHost {
     fun panes(): List<ExtPane>
     fun focusedPaneId(): String?
-    fun sendText(paneId: String, text: String)
+    /** Paste [text] without adding Enter. Waits for transport acceptance; throws on failure. */
+    fun sendText(paneId: String, text: String) = sendInput(paneId, text, emptyList())
+
+    /** Paste and keys are one ordered operation; implementations must not split the submission. */
+    fun sendInput(paneId: String, text: String?, keys: List<String>)
+
+    fun submit(paneId: String, text: String) = sendInput(paneId, text, listOf("enter"))
+
+    /** UTF-8 text including control characters, without paste wrapping or newline conversion. */
+    fun sendRaw(paneId: String, text: String)
 
     /** herdr のキー名(例 "enter", "esc")。 */
-    fun sendKeys(paneId: String, keys: List<String>)
+    fun sendKeys(paneId: String, keys: List<String>) = sendInput(paneId, null, keys)
 
     /** ペインの末尾 [lines] 行を返す。ブロックしてよい。 */
     fun readPane(paneId: String, lines: Int): String

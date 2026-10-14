@@ -25,9 +25,9 @@ object MoshBootstrap {
     }
 
     /** mosh-server command that runs the herdr attach for one pane. Pass through [RemoteCommand.viaLoginShell]. */
-    fun serverCommand(session: String, terminalId: String, bindToSshAddress: Boolean = true, locale: String = LOCALES[0]): String =
+    fun serverCommand(session: String, terminalId: String, bindToSshAddress: Boolean = true, locale: String = LOCALES[0], socketPath: String? = null): String =
         "env MOSH_SERVER_NETWORK_TMOUT=$NETWORK_TMOUT_SEC mosh-server new ${if (bindToSshAddress) "-s " else ""}-c 256 -l LANG=$locale -- " +
-            RemoteCommand.herdrAttach(session, terminalId) + " 2>&1"
+            RemoteCommand.herdrAttach(session, terminalId, socketPath) + " 2>&1"
 
     /** Locales to try in order (macOS older than recent releases lacks C.UTF-8). */
     val LOCALES = listOf("en_US.UTF-8", "C.UTF-8")

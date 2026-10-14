@@ -3539,16 +3539,24 @@ public final class TerminalEmulator {
 
     /** If DECSET 2004 is set, prefix paste with "\033[200~" and suffix with "\033[201~". */
     public void paste(String text) {
+        mSession.write(encodePaste(text));
+    }
+
+    /** Encode one paste so callers can append an explicit Enter in the same transport write. */
+    public String encodePaste(String text) {
+        text = normalizePasteText(text);
+        boolean bracketed = isDecsetInternalBitSet(DECSET_BIT_BRACKETED_PASTE_MODE);
+        return bracketed ? "\033[200~" + text + "\033[201~" : text;
+    }
+
+    /** Shared by local paste and the herdr paste API; independent of the remote host OS. */
+    public static String normalizePasteText(String text) {
         // First: Always remove escape key and C1 control characters [0x80,0x9F]:
         text = text.replaceAll("(\u001B|[\u0080-\u009F])", "");
         // Second: Replace all newlines (\n) or CRLF (\r\n) with carriage returns (\r).
         text = text.replaceAll("\r?\n", "\r");
 
-        // Then: Implement bracketed paste mode if enabled:
-        boolean bracketed = isDecsetInternalBitSet(DECSET_BIT_BRACKETED_PASTE_MODE);
-        if (bracketed) mSession.write("\033[200~");
-        mSession.write(text);
-        if (bracketed) mSession.write("\033[201~");
+        return text;
     }
 
     /** http://www.vt100.net/docs/vt510-rm/DECSC */

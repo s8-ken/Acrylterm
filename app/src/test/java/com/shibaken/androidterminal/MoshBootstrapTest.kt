@@ -20,7 +20,7 @@ class MoshBootstrapTest {
 
     @Test fun commandConstruction() {
         val c = MoshBootstrap.serverCommand("android", "t'1")
-        assertTrue(c.startsWith("env MOSH_SERVER_NETWORK_TMOUT=3600 mosh-server new -s -c 256 -l LANG=en_US.UTF-8 -- env HERDR_SESSION='android' herdr terminal attach "))
+        assertTrue(c.startsWith("env MOSH_SERVER_NETWORK_TMOUT=3600 mosh-server new -s -c 256 -l LANG=en_US.UTF-8 -- env -u HERDR_SOCKET_PATH HERDR_SESSION='android' herdr terminal attach "))
         assertTrue(c.contains("'t'\\''1' --takeover"))
         assertTrue(c.endsWith(" 2>&1"))
     }

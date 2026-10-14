@@ -6,6 +6,12 @@ import com.shibaken.androidterminal.data.HostProfile
 import com.shibaken.androidterminal.herdr.AgentAlertListener
 import com.shibaken.androidterminal.herdr.HerdrController
 import com.shibaken.androidterminal.herdr.HerdrState
+import com.shibaken.androidterminal.herdr.HerdrClient
+import com.shibaken.androidterminal.herdr.HerdrSessionInfo
+import com.shibaken.androidterminal.herdr.HerdrSessionPickerState
+import com.shibaken.androidterminal.herdr.parseHerdrSessions
+import com.shibaken.androidterminal.herdr.herdrSessionPreferenceKey
+import com.shibaken.androidterminal.herdr.resolveRunningHerdrSession
 import com.shibaken.androidterminal.ssh.MoshBootstrap
 import com.shibaken.androidterminal.ssh.MoshBridge
 import com.shibaken.androidterminal.ssh.MoshChannel
@@ -87,6 +93,75 @@ class SshTerminalSession(
     /** One-off user-visible notes (e.g. Mosh fell back to SSH) for a snackbar. */
     val notices: SharedFlow<String> = _notices.asSharedFlow()
     private var moshNoticeShown = false
+
+    private val sessionPreferences = app.getSharedPreferences("herdr_sessions", 0)
+    private var selectionKey = herdrSessionPreferenceKey(profile)
+    private var target: HerdrSessionInfo? = null
+    private val _selectedHerdrSession = MutableStateFlow(configuredHerdrSession())
+    val selectedHerdrSession = _selectedHerdrSession.asStateFlow()
+    private val _connectedHerdrSession = MutableStateFlow<String?>(null)
+    val connectedHerdrSession = _connectedHerdrSession.asStateFlow()
+    private val _sessionPicker = MutableStateFlow(HerdrSessionPickerState())
+    val sessionPicker = _sessionPicker.asStateFlow()
+    private var discoveryJob: Job? = null
+    private var switchJob: Job? = null
+
+    private suspend fun listHerdrSessions(c: SshConnection): List<HerdrSessionInfo> =
+        parseHerdrSessions(c.execAll(RemoteCommand.viaLoginShell("herdr session list --json"), 10_000))
+
+    fun refreshHerdrSessions() {
+        if (discoveryJob?.isActive == true || switchJob?.isActive == true) return
+        val c = conn
+        if (c == null || !c.isConnected) {
+            _sessionPicker.value = HerdrSessionPickerState(error = "SSH に接続されていません。再接続してください。")
+            return
+        }
+        val gen = generation
+        _sessionPicker.value = _sessionPicker.value.copy(loading = true, error = null)
+        discoveryJob = scope.launch {
+            try {
+                val entries = listHerdrSessions(c)
+                if (gen == generation && conn === c) _sessionPicker.value = HerdrSessionPickerState(sessions = entries)
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                if (gen == generation && conn === c) _sessionPicker.value = HerdrSessionPickerState(error = "一覧を取得できませんでした: ${e.message.orEmpty().take(160)}")
+            }
+        }
+    }
+
+    /** Validate and ping before detaching. This action never starts, creates, stops or deletes a server. */
+    fun selectHerdrSession(name: String) {
+        if (switchJob?.isActive == true || name == _connectedHerdrSession.value) return
+        val c = conn ?: return
+        val gen = generation
+        _sessionPicker.value = _sessionPicker.value.copy(switchingTo = name, error = null)
+        switchJob = scope.launch {
+            try {
+                val entry = resolveRunningHerdrSession(name, { listHerdrSessions(c) }) { HerdrClient(c, it.socketPath).call("ping"); Unit }
+                if (gen != generation || conn !== c) return@launch
+                bootstrapJob?.cancel()
+                discoveryJob?.cancel()
+                generation++
+                val nextGen = generation
+                herdr?.detach(resetState = true)
+                _ext.value?.onDisconnected()
+                panesReady = false
+                closeAllSlots()
+                shell?.close(); shell = null
+                visible = emptySet()
+                target = entry
+                _selectedHerdrSession.value = entry.name
+                _connectedHerdrSession.value = null
+                _mode.value = SessionMode.PANES
+                _state.value = ConnState.Connecting("${entry.name} に接続中…")
+                herdr?.attach(c, entry.name, entry.socketPath, resetState = true)
+                bootstrapJob = scope.launch { bootstrapPanes(c, nextGen, existingOnly = true) }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                if (gen == generation && conn === c) _sessionPicker.value = _sessionPicker.value.copy(switchingTo = null, error = e.message ?: "接続できませんでした")
+            }
+        }
+    }
 
     private val _ext = MutableStateFlow<SessionExt?>(null)
     /** Lua extension runtime; non-null after the first successful connect of a host with extensions on. */
@@ -173,14 +248,14 @@ class SshTerminalSession(
         if (profile.startupCommand.isNotBlank()) {
             term.send((legacyStartup() + "\r").toByteArray())
         }
-        herdr?.attach(c, profile.herdrSession)
+        herdr?.attach(c, effectiveHerdrSession, target?.socketPath)
     }
 
     /** In LEGACY_TUI the typed `herdr` must talk to the same session the controller watches. */
     private fun legacyStartup(): String {
         val cmd = profile.startupCommand.trim()
-        val name = RemoteCommand.sanitizeSessionName(profile.herdrSession)
-        return if (_mode.value == SessionMode.LEGACY_TUI && cmd == "herdr" && name.isNotBlank()) "HERDR_SESSION=$name herdr" else profile.startupCommand
+        return if (_mode.value == SessionMode.LEGACY_TUI && cmd == "herdr")
+            "${RemoteCommand.herdrEnvironment(effectiveHerdrSession, target?.socketPath)} herdr" else profile.startupCommand
     }
 
     // --- connect -----------------------------------------------------------------------
@@ -193,6 +268,14 @@ class SshTerminalSession(
     private suspend fun doConnect() {
         closeTransport(keepMosh = true)
         profile = app.hosts.get(profile.id) ?: profile
+        val key = herdrSessionPreferenceKey(profile)
+        if (key != selectionKey) {
+            selectionKey = key
+            target = null
+            herdr?.detach(resetState = true)
+            closeAllSlots()
+        }
+        _selectedHerdrSession.value = target?.name ?: sessionPreferences.getString(selectionKey, null) ?: configuredHerdrSession()
         val gen = generation
         val c = SshConnection(app, profile)
         conn = c
@@ -201,16 +284,19 @@ class SshTerminalSession(
             if (profile.useMosh) reapOrphans(c)
             if (herdr != null) {
                 _state.value = ConnState.Connecting("マルチペインを準備中…")
-                if (ensureHerdrServer(c)) {
+                val existingOnly = target != null || sessionPreferences.contains(selectionKey)
+                if (existingOnly) {
+                    target = resolveRunningHerdrSession(_selectedHerdrSession.value, { listHerdrSessions(c) }) { HerdrClient(c, it.socketPath).call("ping"); Unit }
+                }
+                if (existingOnly || ensureHerdrServer(c)) {
                     if (gen != generation) return
                     _mode.value = SessionMode.PANES
                     _state.value = ConnState.Connected
                     panesReady = true
-                    syncPanes(paneIds(herdr.state.value))
-                    herdr.attach(c, effectiveHerdrSession)
-                    bootstrapJob = scope.launch { bootstrapPanes(c, gen) }
+                    herdr.attach(c, effectiveHerdrSession, target?.socketPath)
+                    bootstrapJob = scope.launch { bootstrapPanes(c, gen, existingOnly) }
                     reconcile()
-                    afterConnected(c)
+                    if (!existingOnly) afterConnected(c)
                     return
                 }
                 Log.w(TAG, "herdr panes unavailable; falling back to the herdr TUI")
@@ -224,8 +310,11 @@ class SshTerminalSession(
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "connect failed", e)
-            if (conn === c) conn = null
-            thread(name = "ssh-close", isDaemon = true) { c.close() }
+            // Keep a healthy SSH transport available so a stopped remembered target can be changed.
+            if (!c.isConnected) {
+                if (conn === c) conn = null
+                thread(name = "ssh-close", isDaemon = true) { c.close() }
+            }
             val msg = if (e is SshCancelledException) e.message else (e.message ?: e.javaClass.simpleName)
             _state.value = ConnState.Disconnected(msg)
         }
@@ -233,9 +322,10 @@ class SshTerminalSession(
 
     // --- herdr server / bootstrap ----------------------------------------------------------
 
-    private val effectiveHerdrSession: String
-        get() = RemoteCommand.sanitizeSessionName(profile.herdrSession.ifBlank { DEFAULT_HERDR_SESSION })
+    private fun configuredHerdrSession(): String = RemoteCommand.sanitizeSessionName(profile.herdrSession.ifBlank { DEFAULT_HERDR_SESSION })
             .ifBlank { DEFAULT_HERDR_SESSION }
+
+    private val effectiveHerdrSession: String get() = _selectedHerdrSession.value
 
     /** True when `herdr terminal attach` is supported and the (phone) session's server is running. */
     private suspend fun ensureHerdrServer(c: SshConnection): Boolean {
@@ -245,7 +335,7 @@ class SshTerminalSession(
                 Log.i(TAG, "herdr too old or missing: '$version'")
                 return false
             }
-            val env = "env HERDR_SESSION=${RemoteCommand.quote(effectiveHerdrSession)}"
+            val env = RemoteCommand.herdrEnvironment(effectiveHerdrSession)
             suspend fun running() =
                 RemoteCommand.isServerRunning(c.exec(RemoteCommand.viaLoginShell("$env herdr status server")))
             if (running()) return true
@@ -265,11 +355,17 @@ class SshTerminalSession(
     }
 
     /** Waits for the first snapshot; creates a workspace if the session is empty, else falls back to the TUI. */
-    private suspend fun bootstrapPanes(c: SshConnection, gen: Int) {
+    private suspend fun bootstrapPanes(c: SshConnection, gen: Int, existingOnly: Boolean = false) {
         val h = herdr ?: return
         val ready = withTimeoutOrNull(15_000) { h.state.first { it.phase == HerdrState.Phase.READY } }
         if (gen != generation) return
         if (ready == null) {
+            if (existingOnly) {
+                h.detach()
+                _state.value = ConnState.Disconnected("${effectiveHerdrSession} の応答を確認できませんでした。セッションを選び直してください。")
+                _sessionPicker.value = _sessionPicker.value.copy(switchingTo = null, error = "接続を確認できませんでした。一覧を更新して選び直してください。")
+                return
+            }
             Log.w(TAG, "herdr API not ready; falling back to the herdr TUI")
             h.detach()
             panesReady = false
@@ -284,7 +380,14 @@ class SshTerminalSession(
             }
             return
         }
-        if (ready.workspaces.isEmpty()) h.newWorkspace(null)
+        _connectedHerdrSession.value = effectiveHerdrSession
+        sessionPreferences.edit().putString(selectionKey, effectiveHerdrSession).apply()
+        _sessionPicker.value = _sessionPicker.value.copy(switchingTo = null)
+        panesReady = true
+        _state.value = ConnState.Connected
+        reconcile()
+        if (existingOnly) afterConnected(c)
+        if (!existingOnly && ready.workspaces.isEmpty()) h.newWorkspace(null)
     }
 
     // --- panes -------------------------------------------------------------------------------
@@ -404,7 +507,7 @@ class SshTerminalSession(
         val terminalId = slot.terminalId
         scope.launch {
             try {
-                val cmd = RemoteCommand.herdrAttach(effectiveHerdrSession, terminalId)
+                val cmd = RemoteCommand.herdrAttach(effectiveHerdrSession, terminalId, target?.socketPath)
                 val mosh = tryOpenMosh(c, slot, term, terminalId)
                 val ch: PaneStream = mosh ?: withContext(Dispatchers.IO) {
                     c.openPtyExec(cmd, term.cols, term.rows, term.cols * term.cellW, term.rows * term.cellH)
@@ -457,7 +560,7 @@ class SshTerminalSession(
             for (locale in MoshBootstrap.LOCALES) {
                 out = c.execAll(
                     RemoteCommand.viaLoginShell(
-                        MoshBootstrap.serverCommand(effectiveHerdrSession, terminalId, target.bindToSshAddress, locale),
+                        MoshBootstrap.serverCommand(effectiveHerdrSession, terminalId, target.bindToSshAddress, locale, this@SshTerminalSession.target?.socketPath),
                     ),
                     MOSH_BOOTSTRAP_TIMEOUT_MS,
                 )
@@ -596,6 +699,11 @@ class SshTerminalSession(
     /** Main thread. Socket writes (channel close / disconnect) happen on a background thread. */
     private fun closeTransport(keepMosh: Boolean = false) {
         generation++
+        herdr?.detach()
+        _connectedHerdrSession.value = null
+        discoveryJob?.cancel()
+        switchJob?.cancel()
+        _sessionPicker.value = HerdrSessionPickerState()
         _ext.value?.onDisconnected()
         panesReady = false
         bootstrapJob?.cancel(); bootstrapJob = null

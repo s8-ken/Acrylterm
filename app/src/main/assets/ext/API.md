@@ -3,6 +3,8 @@
 You (an AI coding agent) can customize the Veildeck Android app by writing Lua files into
 `~/.config/androidterminal/*.lua` on this machine. No install is needed on the PC side.
 
+Host script sync/generation currently requires a POSIX shell and utilities (`sh`, `cksum`, `cat`, `base64`, etc.). Native Windows PowerShell-only hosts are not supported by that workflow; a POSIX environment such as a WSL SSH endpoint is needed. The input methods below do not switch newline conventions based on OS.
+
 ## Reload loop
 1. Edit or create `~/.config/androidterminal/<name>.lua` (name: letters, digits, `_`, `-`, `.`; ends with `.lua`).
 2. The app polls this directory about every 3 seconds (`cksum`) and reloads when something changed.
@@ -44,18 +46,18 @@ on("connected", function() toast("connected") end)
 
 -- Commands (shown in the app's "extension commands" sheet)
 command("git status", function(ctx)
-  if ctx.pane then ctx.pane:send("git status\r") end -- ctx.pane = focused pane or nil
+  if ctx.pane then ctx.pane:submit("git status") end -- ctx.pane = focused pane or nil
 end)
 
 -- Extra keys (buttons next to the built-in key bar)
-keys.add("gst", "git status\r")                         -- string: sent as text
+keys.add("gst", {send = "git status", keys = {"enter"}}) -- paste + Enter in one operation
 keys.add("ESC2", {send = "", keys = {"esc", "esc"}})    -- table: text then herdr key names
-keys.add("clr", function(pane) pane:send("clear\r") end)
+keys.add("clr", function(pane) pane:submit("clear") end)
 
 -- Quick replies. If the pane text matches the regex, these choices replace the default ones.
--- A plain string is both the label and the text sent, followed by Enter ("\r").
--- A table: {label=, send=, keys=}; `send` is sent as-is, then `keys`.
-quick_reply.rule("Proceed\\? \\[y/n\\]", { "y", {label = "No", send = "n\r"}, {label = "Esc", keys = {"esc"}} })
+-- A plain string is both the label and the pasted text, followed by an explicit Enter key.
+-- A table: {label=, send=, keys=}; paste `send` and press `keys` in one operation.
+quick_reply.rule("Proceed\\? \\[y/n\\]", { "y", {label = "No", send = "n", keys = {"enter"}}, {label = "Esc", keys = {"esc"}} })
 
 notify("title", "body")        -- Android notification (tap opens the focused pane)
 toast("short message")
@@ -71,8 +73,33 @@ timer.cancel(tid)                  -- true if it existed; also fine inside its o
 
 ### Pane objects
 Fields: `id`, `title`, `agent` (e.g. "claude", may be nil), `status` (`idle|working|blocked|done|unknown`), `cwd` (may be nil).
-Methods (use `:`): `pane:send(text)` (raw text, include `"\r"` for Enter), `pane:send_keys({"enter","esc"})`, `pane:read(n)` (last n screen lines, default 40).
+Methods (use `:`):
+
+| Method | Meaning |
+| --- | --- |
+| `pane:send(text)` | Paste text without adding Enter. |
+| `pane:submit(text)` | Paste text, then press Enter, in one operation. Use this to run a command or submit a prompt. |
+| `pane:send_keys({"enter","esc"})` | Press named keys in list order. |
+| `pane:send_raw(text)` | Send the UTF-8 string unchanged, including control characters; no paste wrapper or newline conversion. Advanced use only. |
+| `pane:read(n)` | Last n screen lines, default 40. |
+
 In plain shell mode there is a single pane with `id = "shell"`.
+
+```lua
+pane:send("draft")                  -- input only
+pane:submit("echo hello")           -- input + Enter
+pane:send_keys({"enter"})           -- confirm the current input
+pane:send_raw("\003")               -- literal Ctrl+C byte
+```
+
+`send` and `submit` use terminal paste semantics, consistently in PANES and SHELL modes:
+- LF (`\n`), CRLF (`\r\n`) and CR (`\r`) are normalized to CR for terminal input, regardless of whether the host is macOS, Linux or Windows. File newline conventions do not determine the Enter key encoding. ESC and C1 control characters are removed, as with clipboard paste; use `send_raw` for those characters.
+- When the receiving program enables bracketed paste, embedded newlines remain pasted content. `submit` adds exactly one Enter **outside** the paste wrapper, even for an empty string. Without bracketed paste, the receiving program may interpret embedded newlines as Enter. The API cannot guarantee multiline insertion for such programs.
+- These methods operate on the current program and input buffer. `submit` does not clear existing input, choose a shell or wait for command completion.
+- Calls wait for transport acceptance and preserve Lua call order. PANES input from the app's RPC queue is ordered per pane; a submission's text and keys share one RPC. SHELL submits one ordered stream write. This does not lock out another client or guarantee the target program has processed the input.
+- Disconnection, invalid keys and rejected writes raise Lua errors (`pcall` can catch them). An acknowledgement timeout may mean input was already sent: do not retry blindly. Uncaught callback errors go to the extension log and toast.
+
+Migration: replace `pane:send("command\r")` with `pane:submit("command")`. For a key button, use `{send="command", keys={"enter"}}` or a callback calling `submit`. A string passed to `keys.add` only pastes; a string in `quick_reply.rule` submits. Use `send_raw` only when literal terminal control characters are intended.
 
 ## Limits
 - `term.on_output` only sees panes that are currently being displayed (detached/hidden panes are not read). `agent_status` works for all panes.

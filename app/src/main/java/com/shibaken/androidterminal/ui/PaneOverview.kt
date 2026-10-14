@@ -115,17 +115,13 @@ fun PaneOverview(state: HerdrState, herdr: HerdrController, onDismiss: () -> Uni
                 horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 item { FilterChip(workspace == null, { workspace = null }, { Text("すべて · ${state.tabs.size}") }, shape = CircleShape) }
                 items(state.workspaces, key = { it.workspaceId }) { ws ->
-                    val displayed = ws.workspaceId == rawState.focusedWorkspaceId
                     FilterChip(workspace == ws.workspaceId, { workspace = ws.workspaceId },
                         modifier = Modifier.semantics {
-                            contentDescription = ws.title + if (displayed) "、表示中" else ""
+                            contentDescription = ws.title
                             stateDescription = if (workspace == ws.workspaceId) "絞り込み中" else "絞り込みなし"
                         },
                         label = { Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(ws.title, Modifier.widthIn(max = 132.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (displayed) Text("表示中", Modifier.padding(start = 8.dp).clip(CircleShape)
-                                .background(CyanVeil.Cyan.copy(alpha = .12f)).padding(horizontal = 6.dp, vertical = 2.dp),
-                                fontSize = 10.sp, color = CyanVeil.Cyan, maxLines = 1)
                         } }, shape = CircleShape)
                 }
             }

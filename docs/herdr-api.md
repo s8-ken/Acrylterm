@@ -125,7 +125,7 @@ optional `pane_id`, the server's focused pane is used.
 | `pane.rename` | `{pane_id, label?}` | `pane_info` |
 | `pane.send_text` | `{pane_id, text}` | `ok`. Raw bytes are written to the PTY, with no bracketed-paste wrapping. |
 | `pane.send_keys` | `{pane_id, keys:["enter","ctrl+c","esc","up","f1","shift+tab","minus",...]}` | `ok` / `invalid_key` |
-| `pane.send_input` | `{pane_id, text?, keys?}` | `ok` (text first, then keys) |
+| `pane.send_input` | `{pane_id, text?, keys?}` | `ok`. Text uses bracketed-paste wrapping when enabled by the pane; keys follow outside the wrapper, in one PTY write. Use `keys:["enter"]` to submit, not a CR appended to text. |
 | `pane.read` | `{pane_id, source:"visible\|recent\|recent_unwrapped\|detection", lines?, format:"text"(default)\|"ansi", strip_ansi=true}` | `pane_read` → `read{pane_id, workspace_id, tab_id, source, format, text, revision, truncated}` |
 | `pane.scroll` (0.9 only) | `{pane_id, offset_from_bottom}` | `pane_info` → `pane` |
 | `agent.list` / `agent.get{target}` | | `agent_list` → `agents[]` / `agent_info` |

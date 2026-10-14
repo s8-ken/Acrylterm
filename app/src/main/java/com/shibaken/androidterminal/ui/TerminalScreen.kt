@@ -125,6 +125,10 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     val appearance = LocalAppearance.current
     val state by session.state.collectAsState()
     val title by session.title.collectAsState()
+    val selectedHerdrSession by session.selectedHerdrSession.collectAsState()
+    val connectedHerdrSession by session.connectedHerdrSession.collectAsState()
+    val sessionPicker by session.sessionPicker.collectAsState()
+    var showSessionPicker by remember { mutableStateOf(false) }
     val herdr = session.herdr
     val rawHerdrState = herdr?.state?.collectAsState()?.value ?: HerdrState()
     val pendingCloses = herdr?.pendingTabCloses?.collectAsState()?.value.orEmpty()
@@ -149,7 +153,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
             onTextSizeChanged = { size -> app.hosts.get(session.profile.id)?.let { app.hosts.save(it.copy(fontSizeSp = size)) } }
         }
     }
-    val pool = remember(sessionId) {
+    val pool = remember(sessionId, selectedHerdrSession) {
         PaneViewPool(context, modifiers, session.profile.fontSizeSp) { size ->
             app.hosts.get(session.profile.id)?.let { app.hosts.save(it.copy(fontSizeSp = size)) }
         }
@@ -200,6 +204,12 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     val extGenState = extRt?.genState?.collectAsState()?.value ?: GenState.Idle
     var showOverview by remember { mutableStateOf(false) }
     var showComposer by remember { mutableStateOf(false) }
+
+    LaunchedEffect(selectedHerdrSession) {
+        showComposer = false
+        showOverview = false
+        confirmClosePane = false
+    }
 
     val snackbarHost = remember { SnackbarHostState() }
     LaunchedEffect(herdr) {
@@ -374,20 +384,19 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
             if (isPanes) {
                 Column(terminalModifier) {
                     Row(Modifier.fillMaxWidth().height(if (fullscreen) 48.dp else 40.dp).padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        // Server focus is independent of overview filtering and pending-close UI fallbacks.
-                        val activeWorkspaceTitle = rawHerdrState.workspace(rawHerdrState.focusedWorkspaceId)?.title ?: "ワークスペース未選択"
                         val connectionTint = if (state is ConnState.Connected) CyanVeil.Mint else CyanVeil.Amber
-                        BoxWithConstraints(Modifier.weight(1f).clearAndSetSemantics {
-                            contentDescription = "${session.profile.displayName} / $activeWorkspaceTitle"
-                        }) {
+                        BoxWithConstraints(Modifier.weight(1f).heightIn(min = 40.dp)
+                            .clickable { showSessionPicker = true; session.refreshHerdrSessions() }
+                            .semantics { contentDescription = "herdr セッションを選択、${session.profile.displayName} / $selectedHerdrSession" }, contentAlignment = Alignment.CenterStart) {
                             val hostMaxWidth = (maxWidth * .42f).coerceAtLeast(24.dp)
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Text("● ", color = connectionTint, style = MaterialTheme.typography.labelSmall)
                                 Text(session.profile.displayName, Modifier.widthIn(max = hostMaxWidth), color = connectionTint,
                                     style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(" / ", color = CyanVeil.Muted, style = MaterialTheme.typography.labelSmall)
-                                Text(activeWorkspaceTitle, Modifier.weight(1f), color = CyanVeil.Muted,
+                                Text(selectedHerdrSession, Modifier.weight(1f, fill = false), color = CyanVeil.Muted,
                                     style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Icon(Icons.Filled.KeyboardArrowDown, null, Modifier.size(18.dp), tint = CyanVeil.Muted)
                             }
                         }
                         if (fullscreen) {
@@ -411,12 +420,12 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                             Text("新しいタブを追加してください", color = CyanVeil.Muted, style = MaterialTheme.typography.bodySmall)
                         }
                         LaunchedEffect(session) { session.setVisiblePanes(emptySet()) }
-                    } else PaneLayout(
+                    } else key(selectedHerdrSession) { PaneLayout(
                         session = session, state = herdrState, herdr = herdr!!, pool = pool,
                         onOpenComposer = { showComposer = true },
                         inputEnabled = !showOverview && !drawerState.isOpen,
                         modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp),
-                    )
+                    ) }
                     val waiting = herdrState.tabs.firstOrNull { tab -> tab.tabId != herdrState.focusedTabId &&
                         herdrState.panes.any { it.tabId == tab.tabId && it.agentStatus == AgentStatus.BLOCKED } }
                     if (!fullscreen && !imeVisible && waiting != null) Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
@@ -550,6 +559,12 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                 }
                 if (result.failures.size > 5) Text("ほか ${result.failures.size - 5} 件", style = MaterialTheme.typography.bodySmall)
             } }, confirmButton = { TextButton(onClick = { herdr?.dismissBulkCloseResult() }) { Text("OK") } })
+    }
+
+    if (showSessionPicker) {
+        HerdrSessionSheet(session.profile.displayName, sessionPicker, connectedHerdrSession.takeIf { rawHerdrState.phase == HerdrState.Phase.READY && state is ConnState.Connected },
+            onRefresh = session::refreshHerdrSessions, onSelect = session::selectHerdrSession,
+            onDismiss = { showSessionPicker = false })
     }
 
     if (extensionsEnabled && showExtCommands && extRt != null) {

@@ -18,22 +18,34 @@ import java.lang.reflect.Proxy
 /** Device regression checks without a live SSH connection or additional test dependencies. */
 class CyanVeilSmokeInstrumentation : Instrumentation() {
     private var captureUi = false
+    private var sessionsOnly = false
+    private var extensionInputOnly = false
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
         captureUi = arguments?.getString("capture_ui") == "true"
+        sessionsOnly = arguments?.getString("herdr_sessions") == "true"
+        extensionInputOnly = arguments?.getString("extension_input") == "true"
         start()
     }
 
     override fun onStart() {
         val result = Bundle()
         try {
+            if (extensionInputOnly) {
+                ExtensionInputChecks(this).run()
+                result.putString("stream", "PASS: extension paste/submit/raw encoding, LF/CRLF/CR, UTF-8, ordered shell writes and disconnected/failed writes.\n")
+                finish(Activity.RESULT_OK, result)
+                return
+            }
             runOnMainSync {
                 verifyPersistence()
                 verifyTerminalTransparency()
+                verifyHerdrSessionPersistence()
             }
-            if (captureUi) CyanVeilUiCapture(this).verifyAndCapture()
+            if (captureUi || sessionsOnly) CyanVeilUiCapture(this).verifyAndCapture(sessionsOnly)
             result.putString("stream", "PASS: appearance persistence and bounds; terminal background transparency; opaque text, ANSI fills and cursor." +
-                if (captureUi) " UI navigation, scripts create/save/cancel/delete, Lua command/key execution, host extension settings, keyboard and screenshots verified.\n" else "\n")
+                if (sessionsOnly) " herdr session picker, loading/error/retry/cancel, exact and long names, XML persistence, fullscreen/IME, tabs/Undo and overview verified.\n"
+                else if (captureUi) " UI navigation, scripts create/save/cancel/delete, Lua command/key execution, host extension settings, keyboard and screenshots verified.\n" else "\n")
             finish(Activity.RESULT_OK, result)
         } catch (error: Throwable) {
             result.putString("stream", "FAIL: ${error.stackTraceToString()}\n")
@@ -52,6 +64,27 @@ class CyanVeilSmokeInstrumentation : Instrumentation() {
             repository.save(AppearanceSettings(-20, false))
             check(AppearanceRepository(targetContext).settings.value.backgroundOpacity == 1f)
         } finally { repository.save(before) }
+    }
+
+    private fun verifyHerdrSessionPersistence() {
+        val app = targetContext.applicationContext
+        val name = "herdr_session_persistence_test"
+        val prefs = app.getSharedPreferences(name, 0)
+        val profile = com.shibaken.androidterminal.data.HostProfile(id = "persistence", host = "host", username = "user")
+        val key = com.shibaken.androidterminal.herdr.herdrSessionPreferenceKey(profile)
+        try {
+            check(prefs.edit().putString(key, "Work-v2").commit())
+            val file = java.io.File(app.applicationInfo.dataDir, "shared_prefs/$name.xml")
+            val parser = android.util.Xml.newPullParser()
+            file.inputStream().use { stream ->
+                parser.setInput(stream, "UTF-8")
+                var restored: String? = null
+                while (parser.next() != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                    if (parser.eventType == org.xmlpull.v1.XmlPullParser.START_TAG && parser.name == "string" && parser.getAttributeValue(null, "name") == key) restored = parser.nextText()
+                }
+                check(restored == "Work-v2") { "Remembered session must survive XML serialization and reload" }
+            }
+        } finally { app.deleteSharedPreferences(name) }
     }
 
     private fun verifyTerminalTransparency() {

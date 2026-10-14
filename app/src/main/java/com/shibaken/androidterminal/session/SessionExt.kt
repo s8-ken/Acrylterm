@@ -1,7 +1,5 @@
 package com.shibaken.androidterminal.session
 
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import com.shibaken.androidterminal.App
 import com.shibaken.androidterminal.ext.ExtEngine
@@ -59,7 +57,6 @@ class SessionExt(
     private val app: App,
     private val scope: CoroutineScope,
 ) {
-    private val mainHandler = Handler(Looper.getMainLooper())
     private val logBuf = ArrayDeque<String>()
     private val _log = MutableStateFlow<List<String>>(emptyList())
     /** Recent `log()` output and load results (newest last, at most [LOG_MAX]). */
@@ -76,13 +73,23 @@ class SessionExt(
         override fun focusedPaneId(): String? =
             if (isPanes()) session.herdr?.state?.value?.focusedPaneId else SHELL_ID
 
-        override fun sendText(paneId: String, text: String) {
-            if (isPanes()) session.herdr?.sendInput(paneId, text, emptyList()) else shellSend(text)
+        override fun sendInput(paneId: String, text: String?, keys: List<String>) {
+            if (isPanes()) {
+                val h = session.herdr ?: error("not connected")
+                runBlocking { h.sendInputAwait(paneId, text, keys) }
+            } else shellSend(paneId) { terminal ->
+                // Encode every key before sending anything (an invalid key cannot leave a partial paste).
+                val suffix = keys.joinToString("") { keyBytes(it) }
+                val pasted = if (text.isNullOrEmpty()) "" else terminal.emulator.encodePaste(text)
+                pasted + suffix
+            }
         }
 
-        override fun sendKeys(paneId: String, keys: List<String>) {
-            if (isPanes()) session.herdr?.sendInput(paneId, null, keys)
-            else shellSend(keys.joinToString("") { keyBytes(it) })
+        override fun sendRaw(paneId: String, text: String) {
+            if (isPanes()) {
+                val h = session.herdr ?: error("not connected")
+                runBlocking { h.sendRawAwait(paneId, text) }
+            } else shellSend(paneId) { text }
         }
 
         override fun readPane(paneId: String, lines: Int): String {
@@ -121,8 +128,16 @@ class SessionExt(
 
     private fun isPanes() = session.mode.value == SessionMode.PANES && session.herdr != null
 
-    private fun shellSend(text: String) {
-        mainHandler.post { session.shell?.sendText(text) }
+    private fun shellSend(paneId: String, encode: (PaneTerminal) -> String) {
+        require(paneId == SHELL_ID) { "pane is no longer available: $paneId" }
+        runBlocking {
+            withTimeout(10_000) {
+                withContext(Dispatchers.Main) {
+                    val terminal = session.shell ?: error("not connected")
+                    terminal.sendChecked(encode(terminal))
+                }
+            }
+        }
     }
 
     // --- log -------------------------------------------------------------------------------

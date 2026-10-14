@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
@@ -76,6 +77,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
 
     // Single-threaded so the loop's bookkeeping needs no locks; blocking I/O happens in HerdrClient.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
+    private val inputQueue = PaneInputQueue(scope)
     private val _state = MutableStateFlow(HerdrState())
     val state: StateFlow<HerdrState> = _state.asStateFlow()
     private val deferredCloses = DeferredTabClosures(scope)
@@ -103,21 +105,22 @@ class HerdrController(private val alerts: AgentAlertListener) {
     private var loopJob: Job? = null
     @Volatile private var client: HerdrClient? = null
 
-    fun attach(conn: SshConnection, herdrSession: String) {
+    fun attach(conn: SshConnection, herdrSession: String, socketPath: String? = null, resetState: Boolean = false) {
         cancelInteractiveOperations()
         deferredCloses.cancelAll()
         loopJob?.cancel()
         client = null
-        loopJob = scope.launch { runLoop(conn, herdrSession) }
+        _state.update { (if (resetState) HerdrState() else it).copy(phase = HerdrState.Phase.CONNECTING, message = null) }
+        loopJob = scope.launch { runLoop(conn, herdrSession, socketPath) }
     }
 
-    fun detach() {
+    fun detach(resetState: Boolean = false) {
         cancelInteractiveOperations()
         deferredCloses.cancelAll()
         loopJob?.cancel()
         loopJob = null
         client = null
-        _state.update { it.copy(phase = HerdrState.Phase.IDLE, message = "切断されました") }
+        _state.update { (if (resetState) HerdrState() else it).copy(phase = HerdrState.Phase.IDLE, message = "切断されました") }
     }
 
     fun dispose() {
@@ -129,8 +132,10 @@ class HerdrController(private val alerts: AgentAlertListener) {
     private suspend fun resolveSocketPath(conn: SshConnection, herdrSession: String): String {
         // sshd does not expand "~" for streamlocal, so resolve the absolute path on the Mac.
         val base = "\${XDG_CONFIG_HOME:-\$HOME/.config}/herdr"
-        val expr = if (herdrSession.isNotBlank()) {
+        val expr = if (herdrSession.isNotBlank() && herdrSession != "default") {
             "$base/sessions/${herdrSession.replace(Regex("[^A-Za-z0-9._-]"), "")}/herdr.sock"
+        } else if (herdrSession == "default") {
+            "$base/herdr.sock"
         } else {
             "\${HERDR_SOCKET_PATH:-$base/herdr.sock}"
         }
@@ -139,16 +144,17 @@ class HerdrController(private val alerts: AgentAlertListener) {
         return path
     }
 
-    private suspend fun runLoop(conn: SshConnection, herdrSession: String) {
+    private suspend fun runLoop(conn: SshConnection, herdrSession: String, knownSocketPath: String?) {
         var backoff = 1_000L
-        var socketPath: String? = null
-        while (scope.isActive) {
+        var socketPath: String? = knownSocketPath
+        while (currentCoroutineContext().isActive) {
             try {
                 _state.update { it.copy(phase = HerdrState.Phase.CONNECTING, message = "接続中…") }
                 if (!conn.isConnected) throw IOException("SSH が切断されています")
                 val path = socketPath ?: resolveSocketPath(conn, herdrSession).also { socketPath = it }
                 val c = HerdrClient(conn, path)
                 val pong = c.call("ping")
+                currentCoroutineContext().ensureActive()
                 val version = pong["version"]?.jsonPrimitive?.contentOrNull ?: ""
                 client = c
                 backoff = 1_000L
@@ -158,6 +164,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                currentCoroutineContext().ensureActive()
                 client = null
                 cancelInteractiveOperations()
                 deferredCloses.cancelAll()
@@ -215,7 +222,10 @@ class HerdrController(private val alerts: AgentAlertListener) {
         refresh.trySend(Unit)
         for (signal in refresh) {
             delay(120) // debounce bursts (a focus change emits 3 events)
-            applySnapshot(c.call("session.snapshot"))
+            val snapshot = c.call("session.snapshot")
+            currentCoroutineContext().ensureActive()
+            if (client !== c) return@coroutineScope
+            applySnapshot(snapshot)
             val panes = _state.value.panes.map { it.paneId }.toSet()
             if (panes != subscribedPanes) {
                 agentJob?.cancel()
@@ -244,7 +254,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
                 }
             }
             if (lifecycle.isCompleted) break
-            _state.update { it.copy(phase = HerdrState.Phase.READY, message = null) }
+            if (client === c) _state.update { it.copy(phase = HerdrState.Phase.READY, message = null) }
         }
     }
 
@@ -297,10 +307,13 @@ class HerdrController(private val alerts: AgentAlertListener) {
         }
         scope.launch {
             try {
-                after(c.call(method, params))
+                if (client !== c) return@launch
+                val result = c.call(method, params)
+                if (client === c) after(result)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                if (client !== c) return@launch
                 Log.w(TAG, "$method failed: ${e.message}", e)
                 _state.update { it.copy(message = "操作に失敗しました") }
                 _errors.tryEmit(failureText(e))
@@ -471,7 +484,11 @@ class HerdrController(private val alerts: AgentAlertListener) {
                     })
                 if (client === c) {
                     // Refresh even when some items failed, so the list reflects partial completion.
-                    try { applySnapshot(c.call("session.snapshot")) }
+                    try {
+                        val snapshot = c.call("session.snapshot")
+                        currentCoroutineContext().ensureActive()
+                        if (client === c) applySnapshot(snapshot)
+                    }
                     catch (_: TimeoutCancellationException) { currentCoroutineContext().ensureActive() }
                     catch (error: CancellationException) { throw error }
                     catch (_: Exception) { /* The subscription loop will refresh after transport recovery. */ }
@@ -489,29 +506,46 @@ class HerdrController(private val alerts: AgentAlertListener) {
     })
 
     /** Types text into a pane without focusing it (e.g. answering a blocked agent). */
-    fun sendText(paneId: String, text: String, pressEnter: Boolean) = act("pane.send_input", buildJsonObject {
-        put("pane_id", paneId)
-        put("text", text)
-        if (pressEnter) put("keys", JsonArray(listOf(JsonPrimitive("enter"))))
-    })
+    fun sendText(paneId: String, text: String, pressEnter: Boolean) =
+        sendInput(paneId, text, if (pressEnter) listOf("enter") else emptyList())
 
     /** Types [text] (if any) into a pane, then presses [keys] (herdr key names such as "enter", "esc"). */
-    fun sendInput(paneId: String, text: String?, keys: List<String>) = act("pane.send_input", buildJsonObject {
-        put("pane_id", paneId)
-        if (!text.isNullOrEmpty()) put("text", text)
-        if (keys.isNotEmpty()) put("keys", JsonArray(keys.map { JsonPrimitive(it) }))
-    })
+    fun sendInput(paneId: String, text: String?, keys: List<String>) {
+        val pending = enqueueInput(paneId, text, keys)
+        scope.launch { awaitInputChecked(pending) }
+    }
+
+    private fun enqueueInput(paneId: String, text: String?, keys: List<String>, raw: Boolean = false): Deferred<Unit> {
+        val c = client
+        val frozenKeys = keys.toList()
+        return inputQueue.enqueue(paneId) {
+            if (c == null) throw IOException("接続されていません")
+            if (client !== c) throw IOException("接続が切り替わりました")
+            sendPaneInput(HerdrRpc { method, params -> c.call(method, params) }, paneId, text, frozenKeys, raw)
+        }
+    }
+
+    /** Lua waits for acknowledgement so errors propagate and subsequent calls cannot overtake. */
+    suspend fun sendInputAwait(paneId: String, text: String?, keys: List<String>) {
+        enqueueInput(paneId, text, keys).await()
+    }
+
+    suspend fun sendRawAwait(paneId: String, text: String) {
+        enqueueInput(paneId, text, emptyList(), raw = true).await()
+    }
 
     /** Like [sendInput] but suspends for the result; emits the failure to [errors] and returns false on error. */
-    suspend fun sendInputChecked(paneId: String, text: String?, keys: List<String>): Boolean {
-        val c = client ?: run { _errors.tryEmit("操作に失敗しました: 接続されていません"); return false }
+    suspend fun sendInputChecked(paneId: String, text: String?, keys: List<String>): Boolean =
+        awaitInputChecked(enqueueInput(paneId, text, keys))
+
+    private suspend fun awaitInputChecked(pending: Deferred<Unit>): Boolean {
         return try {
-            c.call("pane.send_input", buildJsonObject {
-                put("pane_id", paneId)
-                if (!text.isNullOrEmpty()) put("text", text)
-                if (keys.isNotEmpty()) put("keys", JsonArray(keys.map { JsonPrimitive(it) }))
-            })
+            pending.await()
             true
+        } catch (e: TimeoutCancellationException) {
+            currentCoroutineContext().ensureActive()
+            _errors.tryEmit("操作に失敗しました: 応答がタイムアウトしました")
+            false
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -550,6 +584,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
                     put("pane_id", paneId)
                     put("offset_from_bottom", 0)
                 })
+                if (client !== c) return@launch
                 _state.update { st ->
                     st.copy(panes = st.panes.map { p ->
                         if (p.paneId == paneId) p.copy(scroll = p.scroll?.copy(offsetFromBottom = 0)) else p

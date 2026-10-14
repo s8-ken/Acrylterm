@@ -8,6 +8,8 @@ UI の見た目のカスタマイズは対象外。PC 側にインストール�
 1. **全体スクリプト**: アプリ内 `filesDir/ext/global/*.lua`。アプリ内エディタで編集。
 2. **ホストのスクリプト**(ホスト設定で「ホストのスクリプトを読み込む」を on): PC の `~/.config/androidterminal/*.lua` を接続時に取り込み、`filesDir/ext/hosts/<hostId>/` にキャッシュ。
 
+ホスト側の読み込み・生成・保存は `sh` / `cksum` / `cat` / `base64` などのPOSIX環境が前提。Windows標準PowerShellだけのホストには未対応で、WSL内のSSH接続先などが必要。端末入力APIの改行処理とは別の制約。
+
 読み込み順は 1 → 2、各ディレクトリ内はファイル名順。ファイル名は英数字・`_`・`-`・`.` のみで `.lua` 終わり。
 拡張はホスト設定の「拡張スクリプト」カード内で「このホストで有効にする」(既定 off)が on のホストでだけ動く。
 
@@ -67,7 +69,7 @@ on("agent_status", function(pane, status, prev) end) -- idle/working/blocked/don
 on("connected", function() end)
 command(name, function(ctx) end)               -- ctx.pane = フォーカス中のペイン(無ければ nil)。同名は後勝ち
 keys.add(label, "text" | {send=..., keys={...}} | function(pane) end)
-quick_reply.rule(regex, { "Yes", {label="No", send="n\r"}, {label="Esc", keys={"esc"}} })
+quick_reply.rule(regex, { "Yes", {label="No", send="n", keys={"enter"}}, {label="Esc", keys={"esc"}} })
 notify(title, body)        -- Android 通知(タップでフォーカス中のペインへ)
 toast(text)
 log(...)                   -- tostring をタブ連結。print も同じ
@@ -77,9 +79,29 @@ timer.every(sec, fn) -> id       -- 実行完了から sec 秒間隔で繰り返
 timer.cancel(id) -> boolean      -- 取り消し(自身のコールバック内でも可)。タイマーは最大 32 個、再読込で全停止(読込失敗時は旧スクリプトのタイマーを維持)
 panes()                    -- 全ペインの配列
 ```
-- **ペインオブジェクト**: `id` / `title` / `agent`(nil 可) / `status` / `cwd`(nil 可)。メソッドは `:` で呼ぶ: `pane:send(text)`(生テキスト。Enter は `"\r"`)、`pane:send_keys({"enter"})`(herdr のキー名)、`pane:read(n)`(末尾 n 行、既定 40)。SHELL モードでは単一のペイン `id="shell"`。
-- **keys.add**: 文字列はそのままテキスト送信。テーブルは `send` を送ってから `keys` を送る。関数は押下時に対象ペインを渡して呼ぶ。
-- **quick_reply.rule**: ペイン内容が regex に一致したら(複数行モード、先頭の一致ルールが勝つ)既定の候補の代わりにこの選択肢を出す。文字列の選択肢は「ラベル = 送信文字列、送信時に Enter(`\r`)を付ける」。テーブルは `label`(省略時は `send` または最初の `keys`)、`send`(そのまま送信)、`keys`。
+- **ペインオブジェクト**: `id` / `title` / `agent`(nil 可) / `status` / `cwd`(nil 可)。メソッドは `:` で呼ぶ。SHELL モードでは単一のペイン `id="shell"`。
+- **keys.add**: 文字列は貼り付けのみ。テーブルは `send` の貼り付けと `keys` のキー操作を一度に送る。関数は押下時に対象ペインを渡して呼ぶ。
+- **quick_reply.rule**: ペイン内容が regex に一致したら(複数行モード、先頭の一致ルールが勝つ)既定の候補の代わりにこの選択肢を出す。文字列の選択肢は「ラベル = 貼り付け文字列」とし、明示的な Enter キーを続けて送る。テーブルは `label`(省略時は `send` または最初の `keys`)、`send`(貼り付け)、`keys`(キー操作)。
+
+### 入力と確定
+
+| メソッド | 動作 |
+| --- | --- |
+| `pane:send(text)` | 文字列を貼り付ける。Enter は追加しない |
+| `pane:submit(text)` | 貼り付けの後に Enter を1回押す。文字列とキーを一度に送る |
+| `pane:send_keys({"enter"})` | 指定したキーをリスト順に押す |
+| `pane:send_raw(text)` | UTF-8文字列を制御文字・改行も含めてそのまま送る。貼り付けの囲みや改行変換なし |
+| `pane:read(n)` | 末尾 n 行を読む(既定40) |
+
+`send` / `submit` は PANES・SHELL ともに貼り付けとして扱う。LF・CRLF・CR は端末入力用の CR に揃え、ESC・C1制御文字はクリップボード貼り付けと同様に取り除く。macOS・Linux・WindowsというOS名では切り替えない。ファイルの改行コードと端末のEnterキーは別の概念。
+
+接続先のプログラムが bracketed paste を有効にしていれば、文字列中の改行は貼り付け内容となり、自動確定しない。未対応・無効の場合は、プログラムが改行を Enter と解釈することがある。`submit` は貼り付けの囲みの外に Enter を追加する(空文字列でも1回)。現在の入力欄を消したり、シェルを選んだり、コマンド終了を待ったりはしない。
+
+Lua の入力APIは送信受付まで待ち、呼び出し順を保つ。PANESではアプリの入力RPCをペインごとに直列化し、文字列＋キーは1つのRPC、SHELLでは1つのストリーム書き込みとする。別クライアントの入力や、相手プログラムの処理完了までを保証するものではない。
+
+切断・不正なキー・書き込み失敗はLuaエラーとなり、`pcall`で検知できる。未処理エラーはログとトーストへ出す。応答タイムアウト時は既に送信された可能性があるため、自動再送はしない。
+
+旧例の `pane:send("command\r")` は `pane:submit("command")` へ移行する。補助キーで実行する場合は `{send="command", keys={"enter"}}` を使う。文字列に制御文字を含めること自体が目的の場合だけ `send_raw` を使う。
 
 ### 例
 ```lua
@@ -89,7 +111,10 @@ end)
 on("agent_status", function(pane, status)
   if status == "blocked" then notify(pane.title, "needs input") end
 end)
-keys.add("gst", "git status\r")
+keys.add("gst", {send="git status", keys={"enter"}})
+command("echo", function(ctx)
+  if ctx.pane then ctx.pane:submit("echo") end
+end)
 command("uptime", function(ctx) toast(ssh.exec("uptime")) end)
 ```
 

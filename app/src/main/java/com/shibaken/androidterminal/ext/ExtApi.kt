@@ -116,13 +116,25 @@ internal class ExtApi(
         paneMethods.set("send", fn { a ->
             val id = paneId(a.arg(1))
             val text = a.arg(2).checkjstring()
-            hostCall("pane:send") { host.sendText(id, text) }
+            hostCall("pane:send") { runtime.blocking { host.sendText(id, text) } }
+            LuaValue.NONE
+        })
+        paneMethods.set("submit", fn { a ->
+            val id = paneId(a.arg(1))
+            val text = a.arg(2).checkjstring()
+            hostCall("pane:submit") { runtime.blocking { host.submit(id, text) } }
+            LuaValue.NONE
+        })
+        paneMethods.set("send_raw", fn { a ->
+            val id = paneId(a.arg(1))
+            val text = a.arg(2).checkjstring()
+            hostCall("pane:send_raw") { runtime.blocking { host.sendRaw(id, text) } }
             LuaValue.NONE
         })
         paneMethods.set("send_keys", fn { a ->
             val id = paneId(a.arg(1))
             val keys = stringList(a.arg(2), "keys")
-            hostCall("pane:send_keys") { host.sendKeys(id, keys) }
+            hostCall("pane:send_keys") { runtime.blocking { host.sendKeys(id, keys) } }
             LuaValue.NONE
         })
         paneMethods.set("read", fn { a ->
@@ -226,8 +238,8 @@ internal class ExtApi(
     private fun parseChoice(v: LuaValue, idx: Int): ExtChoice {
         if (v.isstring()) {
             val s = v.tojstring()
-            // 文字列だけ: ラベル = 送信文字列、送信時に Enter(\r) を付ける
-            return ExtChoice(s, s + "\r")
+            // 文字列だけ: 貼り付け + 明示的な Enter を一度に送る。
+            return ExtChoice(s, s, listOf("enter"))
         }
         if (!v.istable()) throw LuaError("quick_reply choice #$idx must be a string or table")
         val send = v.get("send").let { if (it.isstring()) it.tojstring() else null }

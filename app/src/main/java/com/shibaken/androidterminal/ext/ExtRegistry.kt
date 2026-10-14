@@ -1,6 +1,6 @@
 package com.shibaken.androidterminal.ext
 
-/** クイック返信の選択肢。[text] を送り、続けて [keys](herdr キー名)を送る。どちらも空なら何もしない。 */
+/** クイック返信の選択肢。[text] の貼り付けと [keys](herdr キー名)を一度に送る。どちらも空なら何もしない。 */
 data class ExtChoice(val label: String, val text: String?, val keys: List<String> = emptyList())
 
 /** `command(name, fn)` で登録されたコマンド。実行は [ExtEngine.runCommand]。 */

@@ -85,8 +85,7 @@ class ExtEngine(
         try {
             when (action) {
                 is KeyAction.Send -> {
-                    action.text?.let { host.sendText(id, it) }
-                    if (action.keys.isNotEmpty()) host.sendKeys(id, action.keys)
+                    runtime.blocking { host.sendInput(id, action.text, action.keys) }
                 }
                 is KeyAction.Call -> action.fn.call(l.api.paneObjectFor(id))
             }

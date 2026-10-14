@@ -18,8 +18,11 @@ object RemoteCommand {
      * Attach command for one pane. Options must come after the terminal id
      * (`terminal attach --takeover <id>` fails with "unknown option").
      */
-    fun herdrAttach(session: String, terminalId: String): String =
-        "env HERDR_SESSION=${quote(session)} herdr terminal attach ${quote(terminalId)} --takeover"
+    fun herdrEnvironment(session: String, socketPath: String? = null): String =
+        (if (socketPath == null) "env -u HERDR_SOCKET_PATH" else "env HERDR_SOCKET_PATH=${quote(socketPath)}") + " HERDR_SESSION=${quote(session)}"
+
+    fun herdrAttach(session: String, terminalId: String, socketPath: String? = null): String =
+        "${herdrEnvironment(session, socketPath)} herdr terminal attach ${quote(terminalId)} --takeover"
 
     /** herdr session names are used in file paths and env vars: keep a conservative alphabet. */
     fun sanitizeSessionName(name: String): String = name.replace(Regex("[^A-Za-z0-9._-]"), "")

@@ -34,7 +34,7 @@ class PanesLogicTest {
 
     @Test fun attachCommandPutsOptionsAfterTerminalId() {
         assertEquals(
-            "env HERDR_SESSION='android' herdr terminal attach 'term_65da' --takeover",
+            "env -u HERDR_SOCKET_PATH HERDR_SESSION='android' herdr terminal attach 'term_65da' --takeover",
             RemoteCommand.herdrAttach("android", "term_65da"),
         )
     }

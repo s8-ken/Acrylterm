@@ -36,7 +36,7 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
         end)
     """.trimIndent()
 
-    fun verifyAndCapture() {
+    fun verifyAndCapture(sessionsOnly: Boolean = false) {
         val appearance = app.appearance.settings.value
         val sessions = app.sessions.sessions.value
         val previousScript = app.scriptStore.readGlobal(scriptName)
@@ -85,7 +85,7 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
             awaitNode { it.contentDescription?.startsWith("タブ一覧") == true }
             capture("terminal")
             verifyTopTargets()
-            verifyWorkspaceIndicators()
+            verifySessionPicker()
             verifyFullscreen(activity)
             verifyTerminalMenu()
             verifyMissingWorkspacePrompt()
@@ -133,7 +133,7 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
             click("キーボードの表示/非表示")
             capture("terminal-keyboard")
             click("キーボードの表示/非表示")
-            verifyExtensions(host)
+            if (!sessionsOnly) verifyExtensions(host)
         } catch (error: Throwable) {
             capture("failure")
             val tree = StringBuilder()
@@ -160,54 +160,51 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
         }
     }
 
-    private fun verifyWorkspaceIndicators() {
-        val controller = session.herdr!!
-        val before = controller.state.value
-        awaitNode { it.contentDescription?.toString() == "Mac mini / Development" }
-        capture("workspace-header")
-        click("タブ一覧", prefix = true)
-        awaitNode { it.contentDescription?.toString() == "Development、表示中" }
-        val multiple = before.copy(workspaces = before.workspaces + WorkspaceInfo("w2", label = "Operations"),
-            tabs = before.tabs + TabInfo("t3", "w2", label = "ops"),
-            panes = before.panes + PaneInfo("p3", "w2", "t3", label = "ops"))
-        instrumentation.runOnMainSync { setFlow(controller, "_state", multiple) }
-        settle()
-        click("Operations")
-        awaitNode { it.text?.toString() == "1 個のタブ" }
-        awaitNode { it.contentDescription?.toString() == "Development、表示中" }
-        check(controller.state.value.focusedWorkspaceId == "w1") { "Filtering must not change server focus" }
-        capture("workspace-filter-other")
-        instrumentation.runOnMainSync { setFlow(controller, "_state", multiple.copy(focusedWorkspaceId = "w2", focusedTabId = "t3", focusedPaneId = "p3")) }
-        awaitNode { it.contentDescription?.toString() == "Operations、表示中" }
-        check(find { it.contentDescription?.toString() == "Development、表示中" } == null)
-        capture("workspace-active-follow")
-        instrumentation.runOnMainSync { setFlow(controller, "_state", multiple.copy(focusedWorkspaceId = null, focusedTabId = null, focusedPaneId = null)) }
-        settle()
-        check(find { it.contentDescription?.endsWith("、表示中") == true } == null)
-        click("一覧を閉じる")
-        awaitNode { it.contentDescription?.toString() == "Mac mini / ワークスペース未選択" }
-        capture("workspace-header-none")
-        val originalProfile = session.profile
-        val longHost = "Mac-mini-with-a-very-long-hostname"
-        val longWorkspace = "Development-workspace-with-a-very-long-name"
-        val profile = session.javaClass.getDeclaredField("profile").apply { isAccessible = true }
+    private fun verifySessionPicker() {
+        awaitNode { it.contentDescription?.toString() == "herdr セッションを選択、Mac mini / android" }
+        capture("session-header")
+        click("herdr セッションを選択、", prefix = true)
+        awaitNode { it.text?.toString() == "herdr セッション" }
+        // This fixture stays offline. Inject discovery states to verify the production UI.
+        instrumentation.runOnMainSync { setFlow(session, "_sessionPicker", HerdrSessionPickerState(loading = true)) }
+        awaitNode { it.text?.toString() == "セッション一覧を取得中…" }
+        capture("session-loading")
+        val longName = "Work-session-with-a-very-long-exact-name-0123456789"
+        val entries = listOf(HerdrSessionInfo("android", "/config/sessions/android/herdr.sock", true),
+            HerdrSessionInfo("default", "/config/herdr.sock", true),
+            HerdrSessionInfo(longName, "/config/sessions/long/herdr.sock", true),
+            HerdrSessionInfo("Stopped", "/config/sessions/Stopped/herdr.sock", false))
         instrumentation.runOnMainSync {
-            profile.set(session, originalProfile.copy(name = longHost))
-            setFlow(controller, "_state", before.copy(workspaces = before.workspaces.map { it.copy(label = longWorkspace) }))
+            setFlow(session, "_connectedHerdrSession", "android")
+            setFlow(session, "_sessionPicker", HerdrSessionPickerState(sessions = entries))
         }
-        awaitNode { it.contentDescription?.toString() == "$longHost / $longWorkspace" }
+        awaitNode { it.contentDescription?.toString() == "herdr セッション android、稼働中、このアプリで接続中" }
+        awaitNode { it.contentDescription?.toString() == "herdr セッション Stopped、停止中" }
+        capture("session-picker")
+        click("閉じる")
+        check(session.selectedHerdrSession.value == "android") { "Dismiss must preserve selection" }
+        click("herdr セッションを選択、", prefix = true)
+        instrumentation.runOnMainSync { setFlow(session, "_sessionPicker", HerdrSessionPickerState(error = "一覧を取得できませんでした")) }
+        awaitNode { it.text?.toString() == "再試行" }
+        capture("session-error")
+        click("再試行")
+        awaitNode { it.text?.toString()?.startsWith("SSH に接続されていません") == true }
+        check(session.selectedHerdrSession.value == "android")
+        click("閉じる")
+        // Same pane/tab ids are valid in separate herdr sessions. Header must follow session identity,
+        // and workspace filtering must not reintroduce active-workspace emphasis.
+        instrumentation.runOnMainSync { setFlow(session, "_selectedHerdrSession", longName); setFlow(session, "_connectedHerdrSession", longName) }
+        awaitNode { it.contentDescription?.toString() == "herdr セッションを選択、Mac mini / $longName" }
         verifyTopTargets()
-        var full = awaitNode { it.contentDescription?.toString() == "全画面表示" }
-        while (!full.isClickable) full = checkNotNull(full.parent)
-        val bounds = android.graphics.Rect().also { full.getBoundsInScreen(it) }
-        check(bounds.width() >= (48 * app.resources.displayMetrics.density).toInt() - 1 && bounds.right <= app.resources.displayMetrics.widthPixels)
-        capture("workspace-header-long")
+        capture("session-header-long")
         click("タブ一覧", prefix = true)
-        awaitNode { it.contentDescription?.toString() == "$longWorkspace、表示中" }
-        capture("workspace-marker-long")
+        awaitNode { it.contentDescription?.toString() == "Development" }
+        check(find { it.contentDescription?.endsWith("、表示中") == true } == null)
+        capture("workspace-filter-without-marker")
         click("一覧を閉じる")
-        instrumentation.runOnMainSync { profile.set(session, originalProfile); setFlow(controller, "_state", before) }
-        awaitNode { it.contentDescription?.toString() == "Mac mini / Development" }
+        instrumentation.runOnMainSync { setFlow(session, "_selectedHerdrSession", "android"); setFlow(session, "_connectedHerdrSession", "android") }
+        awaitNode { it.contentDescription?.toString() == "herdr セッションを選択、Mac mini / android" }
+        settle()
     }
 
     private fun verifyTerminalMenu() {

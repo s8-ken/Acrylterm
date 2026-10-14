@@ -15,6 +15,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 class FakeHost : ExtHost {
     val sent = CopyOnWriteArrayList<Pair<String, String>>()
     val keysSent = CopyOnWriteArrayList<Pair<String, List<String>>>()
+    val inputs = CopyOnWriteArrayList<Triple<String, String?, List<String>>>()
+    val rawSent = CopyOnWriteArrayList<Pair<String, String>>()
+    var sendFailure: Exception? = null
     val logs = CopyOnWriteArrayList<String>()
     val toasts = CopyOnWriteArrayList<String>()
     val notes = CopyOnWriteArrayList<Triple<String, String, String?>>()
@@ -23,8 +26,16 @@ class FakeHost : ExtHost {
     var focused: String? = "p1"
     override fun panes() = paneList
     override fun focusedPaneId() = focused
-    override fun sendText(paneId: String, text: String) { sent += paneId to text }
-    override fun sendKeys(paneId: String, keys: List<String>) { keysSent += paneId to keys }
+    override fun sendInput(paneId: String, text: String?, keys: List<String>) {
+        sendFailure?.let { throw it }
+        inputs += Triple(paneId, text, keys)
+        text?.let { sent += paneId to it }
+        if (keys.isNotEmpty()) keysSent += paneId to keys
+    }
+    override fun sendRaw(paneId: String, text: String) {
+        sendFailure?.let { throw it }
+        rawSent += paneId to text
+    }
     override fun readPane(paneId: String, lines: Int) = "screen:$paneId:$lines"
     override fun notify(title: String, body: String, paneId: String?) { notes += Triple(title, body, paneId) }
     override fun toast(text: String) { toasts += text }
@@ -128,7 +139,7 @@ class ExtEngineTest {
         assertTrue(reg.hasOutputTriggers)
         assertEquals(listOf("agent_status", "connected"), reg.eventNames)
         val rule = reg.quickReplyRules.single()
-        assertEquals(listOf(ExtChoice("Yes", "Yes\r"), ExtChoice("No", "n\r")), rule.choices)
+        assertEquals(listOf(ExtChoice("Yes", "Yes", listOf("enter")), ExtChoice("No", "n\r")), rule.choices)
     }
 
     @Test fun invalidRegexIsLuaError() {
@@ -179,6 +190,51 @@ class ExtEngineTest {
         assertTrue(host.logs[1], host.logs[1].contains("boom"))
     }
 
+    @Test fun pasteSubmitKeysAndRawHaveDistinctSemantics() {
+        assertTrue(load("""
+            command("input", function(ctx)
+              local p = ctx.pane
+              p:send("draft\r\n日本語")
+              p:submit("echo")
+              p:submit("")
+              p:send_keys({"enter", "esc"})
+              p:send_raw("\003\r\n\027[A")
+            end)
+        """).ok)
+        engine.runCommand("input")
+        idle()
+        assertEquals(listOf(
+            Triple("p1", "draft\r\n日本語", emptyList<String>()),
+            Triple("p1", "echo", listOf("enter")),
+            Triple("p1", "", listOf("enter")),
+            Triple("p1", null, listOf("enter", "esc")),
+        ), host.inputs.toList())
+        assertEquals(listOf("p1" to "\u0003\r\n\u001b[A"), host.rawSent.toList())
+    }
+
+    @Test fun inputFailuresAreCatchableAndDoNotSendTheFollowingEnter() {
+        assertTrue(load("""
+            command("try", function(ctx)
+              for _, method in ipairs({"send", "submit", "send_raw", "send_keys"}) do
+                local ok, err = pcall(function()
+                  if method == "send_keys" then ctx.pane:send_keys({"enter"})
+                  else ctx.pane[method](ctx.pane, "echo") end
+                end)
+                log(ok, err)
+              end
+            end)
+            keys.add("go", {send="echo", keys={"enter"}})
+        """).ok)
+        host.sendFailure = java.io.IOException("disconnected")
+        engine.runCommand("try")
+        engine.pressKey(0, "p1")
+        idle()
+        assertEquals(4, host.logs.count { it.startsWith("false\t") && it.contains("disconnected") })
+        assertTrue(host.inputs.isEmpty())
+        assertTrue(host.rawSent.isEmpty())
+        assertTrue(host.toasts.single().contains("disconnected"))
+    }
+
     @Test fun keysAndEvents() {
         load(
             """
@@ -195,6 +251,7 @@ class ExtEngineTest {
         idle()
         assertEquals(listOf("p2" to "x", "p2" to "y", "p2" to "z"), host.sent.toList())
         assertEquals(listOf("p2" to listOf("enter")), host.keysSent.toList())
+        assertEquals(Triple("p2", "y", listOf("enter")), host.inputs[1])
         assertEquals(listOf("p2\tblocked\tworking"), host.logs.toList())
         assertEquals(listOf(Triple("t", "b", "p1")), host.notes.toList())
     }
