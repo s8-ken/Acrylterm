@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -31,7 +32,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,9 +49,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
 import com.shibaken.androidterminal.herdr.AgentStatus
 import com.shibaken.androidterminal.herdr.HerdrController
-import com.shibaken.androidterminal.herdr.HerdrException
 import com.shibaken.androidterminal.herdr.HerdrState
 import com.shibaken.androidterminal.herdr.AGENT_KINDS
 import com.shibaken.androidterminal.herdr.PaneInfo
@@ -60,12 +60,11 @@ import com.shibaken.androidterminal.herdr.TabInfo
 import com.shibaken.androidterminal.herdr.WorkspaceInfo
 import com.shibaken.androidterminal.herdr.WorktreeEntry
 import androidx.compose.runtime.collectAsState
-import androidx.compose.ui.text.input.ImeAction
 
 /** Workspace → tab → pane tree with agent status; tap to focus. [title] is the host / session name. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String, showVersion: Boolean, onNavigated: () -> Unit) {
+fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String, showVersion: Boolean, open: Boolean, onNavigated: () -> Unit) {
     var newWorkspace by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf<PaneInfo?>(null) }
     var closing by remember { mutableStateOf<PaneInfo?>(null) }
@@ -73,9 +72,28 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
     var renamingTab by remember { mutableStateOf<TabInfo?>(null) }
     var renamingWs by remember { mutableStateOf<WorkspaceInfo?>(null) }
     var closingWs by remember { mutableStateOf<WorkspaceInfo?>(null) }
-    var removingWs by remember { mutableStateOf<WorkspaceInfo?>(null) }
-    var worktreeWs by remember { mutableStateOf<WorkspaceInfo?>(null) }
     var newTabMenu by remember { mutableStateOf(false) }
+
+    // Worktrees on disk that have no workspace yet (made by agents with `git worktree add`), per repository.
+    // herdr only tags workspaces it opened as worktrees, so every workspace is asked; the repository is keyed by
+    // its main checkout. Any failure (outside git, trust required, network) just leaves that workspace out.
+    // Re-read on every open: agents add worktrees while the drawer stays composed but closed.
+    val workspaceIds = state.workspaces.map { it.workspaceId }
+    var repoOf by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var unopened by remember { mutableStateOf<Map<String, List<WorktreeEntry>>>(emptyMap()) }
+    LaunchedEffect(workspaceIds, open) {
+        if (!open) return@LaunchedEffect
+        val repos = HashMap<String, String>()
+        val rows = LinkedHashMap<String, List<WorktreeEntry>>()
+        workspaceIds.forEach { id ->
+            val list = try { herdr.listWorktrees(id) } catch (e: CancellationException) { throw e } catch (_: Exception) { return@forEach }
+            val repo = (list.firstOrNull { !it.isLinked && !it.isBare } ?: list.firstOrNull())?.path?.trimEnd('/') ?: return@forEach
+            repos[id] = repo
+            rows[repo] = list.filter { !it.isBare && it.openWorkspaceId == null }
+        }
+        repoOf = repos
+        unopened = rows
+    }
 
     LazyColumn(contentPadding = PaddingValues(vertical = 12.dp)) {
         item {
@@ -111,7 +129,7 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
             HorizontalDivider()
         }
 
-        state.workspaces.forEach { ws ->
+        state.workspaces.forEachIndexed { index, ws ->
             item(key = "ws-${ws.workspaceId}") {
                 Row(
                     Modifier
@@ -124,7 +142,13 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
                     StatusDot(ws.agentStatus)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(ws.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(ws.title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (ws.worktree?.isLinkedWorktree == true) {
+                                Spacer(Modifier.width(6.dp))
+                                Icon(Icons.Outlined.AccountTree, "ワークツリー", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                         ws.worktree?.repoName?.takeIf { it.isNotBlank() }?.let {
                             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
@@ -135,10 +159,6 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
                         IconButton(onClick = { wsMenu = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.MoreVert, "ワークスペースの操作") }
                         DropdownMenu(wsMenu, { wsMenu = false }) {
                             DropdownMenuItem(text = { Text("名前を変更") }, onClick = { wsMenu = false; renamingWs = ws })
-                            DropdownMenuItem(text = { Text("ワークツリーを作成") }, onClick = { wsMenu = false; worktreeWs = ws })
-                            if (ws.worktree?.isLinkedWorktree == true) {
-                                DropdownMenuItem(text = { Text("ワークツリーを削除") }, onClick = { wsMenu = false; removingWs = ws })
-                            }
                             DropdownMenuItem(text = { Text("閉じる") }, onClick = { wsMenu = false; closingWs = ws })
                         }
                     }
@@ -172,6 +192,16 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
                             onEnter = { herdr.sendText(pane.paneId, "", pressEnter = true) },
                         )
                     }
+                }
+            }
+            // After the repository's last workspace: its worktrees that are not open yet.
+            val repo = repoOf[ws.workspaceId]
+            if (repo != null && state.workspaces.drop(index + 1).none { repoOf[it.workspaceId] == repo }) {
+                val rep = state.workspaces.first { repoOf[it.workspaceId] == repo }
+                val rows = unopened[repo].orEmpty()
+                if (rows.isNotEmpty()) item(key = "wth-$repo") { WorktreeHeader() }
+                rows.forEach { entry ->
+                    item(key = "wt-${entry.path}") { UnopenedWorktreeRow(entry) { herdr.openWorktree(rep.workspaceId, entry.path); onNavigated() } }
                 }
             }
         }
@@ -210,17 +240,36 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
             dismissButton = { TextButton(onClick = { closingWs = null }) { Text("キャンセル") } },
         )
     }
-    removingWs?.let { w ->
-        AlertDialog(
-            onDismissRequest = { removingWs = null },
-            title = { Text("ワークツリーを削除") },
-            text = { Text("「${w.title}」のワークツリーを削除します。") },
-            confirmButton = { TextButton(onClick = { herdr.removeWorktree(w.workspaceId, force = false); removingWs = null }) { Text("削除") } },
-            dismissButton = { TextButton(onClick = { removingWs = null }) { Text("キャンセル") } },
-        )
-    }
-    worktreeWs?.let { w -> WorktreeDialog(w.workspaceId, w.title, herdr, onDismiss = { worktreeWs = null }, onNavigated = onNavigated) }
     preview?.let { p -> PanePreviewDialog(p, herdr, onDismiss = { preview = null }, onFocus = { herdr.focusPane(p.paneId); preview = null; onNavigated() }) }
+}
+
+@Composable
+private fun WorktreeHeader() {
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        HorizontalDivider(Modifier.padding(start = 32.dp, end = 16.dp))
+        Text("ワークツリー", Modifier.padding(start = 32.dp, top = 8.dp), style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun UnopenedWorktreeRow(entry: WorktreeEntry, onClick: () -> Unit) {
+    val dim = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(onClickLabel = "ワークツリーを開く", onClick = onClick)
+            .padding(start = 32.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.AccountTree, null, Modifier.size(16.dp), tint = dim)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(entry.title, style = MaterialTheme.typography.bodyMedium, color = dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(entry.dirName, style = MaterialTheme.typography.bodySmall, color = dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
 }
 
 @Composable
@@ -354,77 +403,11 @@ internal fun NewTabMenu(expanded: Boolean, onDismiss: () -> Unit, herdr: HerdrCo
     }
 }
 
-/** Create a worktree from [workspaceId]'s repository, or open / focus an existing one. */
+/** Confirmations driven by controller state (trust, group close). Mount once per screen. */
 @Composable
-internal fun WorktreeDialog(workspaceId: String, workspaceTitle: String, herdr: HerdrController, onDismiss: () -> Unit, onNavigated: () -> Unit) {
-    var branch by remember { mutableStateOf("") }
-    var base by remember { mutableStateOf("") }
-    var list by remember { mutableStateOf<List<WorktreeEntry>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var askTrust by remember { mutableStateOf(false) }
-    var reload by remember { mutableStateOf(0 to false) }
-    LaunchedEffect(workspaceId, reload) {
-        list = null; error = null
-        try {
-            list = herdr.listWorktrees(workspaceId, trust = reload.second)
-        } catch (e: Exception) {
-            error = when {
-                herdr.needsTrust(e) -> { askTrust = true; null }
-                e is HerdrException && e.code == "not_git_worktree" -> "Git リポジトリの外です"
-                else -> e.message?.lineSequence()?.firstOrNull()?.take(80) ?: "読み込めませんでした"
-            }
-        }
-    }
-    if (askTrust) {
-        AlertDialog(
-            onDismissRequest = { askTrust = false; onDismiss() },
-            title = { Text("このリポジトリを信頼して続行しますか？") },
-            confirmButton = { TextButton(onClick = { askTrust = false; reload = reload.first + 1 to true }) { Text("信頼して続行") } },
-            dismissButton = { TextButton(onClick = { askTrust = false; onDismiss() }) { Text("キャンセル") } },
-        )
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("ワークツリー · $workspaceTitle", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(branch, { branch = it }, label = { Text("ブランチ名") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(base, { base = it }, label = { Text("元にするブランチ(任意)") }, singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Done), modifier = Modifier.fillMaxWidth())
-                TextButton(onClick = { herdr.createWorktree(workspaceId, branch, base.ifBlank { null }); onDismiss(); onNavigated() },
-                    enabled = branch.isNotBlank() && list != null, modifier = Modifier.heightIn(min = 48.dp)) { Text("作成") }
-                HorizontalDivider()
-                Column(Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState())) {
-                    val items = list
-                    when {
-                        error != null -> Text(error.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                        items == null -> if (!askTrust) CircularProgressIndicator(Modifier.size(24.dp))
-                        else -> items.filter { !it.isBare }.forEach { w ->
-                            Column(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable {
-                                if (w.openWorkspaceId != null) herdr.focusWorkspace(w.openWorkspaceId)
-                                else herdr.openWorktree(workspaceId, w.path)
-                                onDismiss(); onNavigated()
-                            }.padding(vertical = 6.dp), verticalArrangement = Arrangement.Center) {
-                                Text(w.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                    fontWeight = if (w.openWorkspaceId != null) FontWeight.SemiBold else FontWeight.Normal)
-                                Text(w.dirName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
-    )
-}
-
-/** Confirmations driven by controller state (trust, group close, forced worktree removal). Mount once per screen. */
-@Composable
-fun HerdrPendingDialogs(herdr: HerdrController, state: HerdrState) {
+fun HerdrPendingDialogs(herdr: HerdrController) {
     val trust by herdr.pendingTrust.collectAsState()
     val groupClose by herdr.pendingGroupClose.collectAsState()
-    val removeFailure by herdr.worktreeRemoveFailure.collectAsState()
     if (trust != null) {
         AlertDialog(
             onDismissRequest = { herdr.dismissTrust() },
@@ -439,15 +422,6 @@ fun HerdrPendingDialogs(herdr: HerdrController, state: HerdrState) {
             title = { Text("紐づくワークツリーのワークスペースもまとめて閉じますか？") },
             confirmButton = { TextButton(onClick = { herdr.confirmGroupClose() }) { Text("まとめて閉じる") } },
             dismissButton = { TextButton(onClick = { herdr.dismissGroupClose() }) { Text("キャンセル") } },
-        )
-    }
-    removeFailure?.let { (id, message) ->
-        AlertDialog(
-            onDismissRequest = { herdr.dismissWorktreeRemoveFailure() },
-            title = { Text("ワークツリーを削除できませんでした") },
-            text = { Text("${state.workspace(id)?.title.orEmpty()}\n$message\n\n強制削除すると未コミットの変更は失われます。") },
-            confirmButton = { TextButton(onClick = { herdr.removeWorktree(id, force = true) }) { Text("強制削除", color = MaterialTheme.colorScheme.error) } },
-            dismissButton = { TextButton(onClick = { herdr.dismissWorktreeRemoveFailure() }) { Text("キャンセル") } },
         )
     }
 }

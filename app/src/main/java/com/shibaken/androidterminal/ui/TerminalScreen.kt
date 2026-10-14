@@ -317,7 +317,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
         drawerContent = {
             if (herdr != null) {
                 ModalDrawerSheet {
-                    HerdrDrawerContent(herdrState, herdr, title = session.profile.displayName, showVersion = !isPanes, onNavigated = { scope.launch { drawerState.close() } })
+                    HerdrDrawerContent(herdrState, herdr, title = session.profile.displayName, showVersion = !isPanes, open = drawerState.targetValue == DrawerValue.Open, onNavigated = { scope.launch { drawerState.close() } })
                 }
             }
         },
@@ -620,7 +620,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                     onSend = { t ->
                         val sh = session.shell
                         val bt = paneTerminals[pid]
-                        if (!isPanes || herdr == null) {
+                        if (!isPanes) {
                             if (sh == null) false
                             else {
                                 sh.emulator.paste(t)
@@ -650,8 +650,8 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
         }
     }
 
-    if (herdr != null) HerdrPendingDialogs(herdr, rawHerdrState)
-    if (workspaceRequired && herdr != null) {
+    if (herdr != null) HerdrPendingDialogs(herdr)
+    if (workspaceRequired) {
         WorkspaceCreationDialog(missingActiveWorkspace = true, onCreate = { herdr.createWorkspaceForNewTab(it) },
             onDismiss = { herdr.cancelWorkspaceCreation() })
     }

@@ -14,7 +14,7 @@ When the host runs [herdr](docs/herdr-api.md), its tabs, panes, and workspaces b
   - Shows the pane layout split on the host as is. Tap to switch panes, drag a divider to resize
   - Create, rename, and close tabs, workspaces, and panes (closing a tab can be undone)
   - Open agent tabs as well as shell tabs
-  - Create and delete herdr worktrees, switch herdr sessions
+  - List and open worktrees made by agents on the host, switch herdr sessions
   - Falls back to a plain shell when herdr is not installed on the host
 - **Watching AI agents**
   - Android notification when an agent is waiting for input

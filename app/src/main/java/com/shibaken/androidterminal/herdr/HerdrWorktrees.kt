@@ -51,24 +51,11 @@ internal fun worktreeListParams(workspaceId: String, trust: Boolean = false) = b
     if (trust) put("trust_repository", true)
 }
 
-internal fun worktreeCreateParams(sourceWorkspaceId: String, branch: String, base: String?, trust: Boolean = false) = buildJsonObject {
-    put("workspace_id", sourceWorkspaceId)
-    put("branch", branch.trim())
-    base?.trim()?.takeIf { it.isNotEmpty() }?.let { put("base", it) }
-    put("focus", true)
-    if (trust) put("trust_repository", true)
-}
-
 internal fun worktreeOpenParams(sourceWorkspaceId: String, path: String, trust: Boolean = false) = buildJsonObject {
     put("workspace_id", sourceWorkspaceId)
     put("path", path)
     put("focus", true)
     if (trust) put("trust_repository", true)
-}
-
-internal fun worktreeRemoveParams(workspaceId: String, force: Boolean) = buildJsonObject {
-    put("workspace_id", workspaceId)
-    if (force) put("force", true)
 }
 
 internal fun workspaceCloseParams(workspaceId: String, group: Boolean) = buildJsonObject {
@@ -83,15 +70,10 @@ internal fun isGroupCloseRequired(error: Exception) = error is HerdrException &&
 
 /** What to retry once the user confirms trusting the repository. */
 sealed interface PendingTrust {
-    data class Create(val sourceWorkspaceId: String, val branch: String, val base: String?) : PendingTrust
     data class Open(val sourceWorkspaceId: String, val path: String) : PendingTrust
 }
 
 internal enum class WorktreeOutcome { DONE, NEEDS_TRUST }
-
-internal suspend fun requestWorktreeCreate(sourceWorkspaceId: String, branch: String, base: String?, trust: Boolean, rpc: HerdrRpc): WorktreeOutcome =
-    try { rpc.call("worktree.create", worktreeCreateParams(sourceWorkspaceId, branch, base, trust)); WorktreeOutcome.DONE }
-    catch (e: Exception) { if (!trust && isTrustError(e)) WorktreeOutcome.NEEDS_TRUST else throw e }
 
 internal suspend fun requestWorktreeOpen(sourceWorkspaceId: String, path: String, trust: Boolean, rpc: HerdrRpc): WorktreeOutcome =
     try { rpc.call("worktree.open", worktreeOpenParams(sourceWorkspaceId, path, trust)); WorktreeOutcome.DONE }

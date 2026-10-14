@@ -33,14 +33,9 @@ class HerdrWorktreesTest {
     }
 
     @Test fun trustIsOnlySentWhenRequested() {
-        assertFalse("trust_repository" in worktreeCreateParams("w", "b", null))
         assertFalse("trust_repository" in worktreeOpenParams("w", "/p"))
         assertFalse("trust_repository" in worktreeListParams("w"))
-        assertEquals(JsonPrimitive(true), worktreeCreateParams("w", "b", "main", trust = true)["trust_repository"])
-        assertEquals("main", worktreeCreateParams("w", " b ", " main ")["base"]?.jsonPrimitive?.content?.let { it })
-        assertFalse("base" in worktreeCreateParams("w", "b", "  "))
-        assertFalse("force" in worktreeRemoveParams("w", false))
-        assertTrue("force" in worktreeRemoveParams("w", true))
+        assertEquals(JsonPrimitive(true), worktreeOpenParams("w", "/p", trust = true)["trust_repository"])
         assertFalse("close_group" in workspaceCloseParams("w", false))
         assertTrue("close_group" in workspaceCloseParams("w", true))
     }
@@ -48,7 +43,7 @@ class HerdrWorktreesTest {
     @Test fun trustErrorAsksInsteadOfRetrying() = runBlocking {
         val calls = mutableListOf<JsonObject>()
         val rpc = HerdrRpc { _, p -> calls += p; throw HerdrException("repository_not_trusted", "untrusted") }
-        assertEquals(WorktreeOutcome.NEEDS_TRUST, requestWorktreeCreate("w", "b", null, false, rpc))
+        assertEquals(WorktreeOutcome.NEEDS_TRUST, requestWorktreeOpen("w", "/p", false, rpc))
         assertEquals(1, calls.size)
         assertFalse("trust_repository" in calls[0])
         try { requestWorktreeOpen("w", "/p", true, rpc); fail() } catch (_: HerdrException) {}

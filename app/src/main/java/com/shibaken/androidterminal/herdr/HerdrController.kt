@@ -91,14 +91,11 @@ class HerdrController(private val alerts: AgentAlertListener) {
     private val _creationBusy = MutableStateFlow(false)
     val creationBusy: StateFlow<Boolean> = _creationBusy.asStateFlow()
     private val _pendingTrust = MutableStateFlow<PendingTrust?>(null)
-    /** Set when a worktree create/open needs the user's OK to trust the repository; retried only via [confirmTrust]. */
+    /** Set when a worktree open needs the user's OK to trust the repository; retried only via [confirmTrust]. */
     val pendingTrust: StateFlow<PendingTrust?> = _pendingTrust.asStateFlow()
     private val _pendingGroupClose = MutableStateFlow<String?>(null)
     /** Workspace id whose close needs its linked worktree workspaces closed too (asks the user first). */
     val pendingGroupClose: StateFlow<String?> = _pendingGroupClose.asStateFlow()
-    private val _worktreeRemoveFailure = MutableStateFlow<Pair<String, String>?>(null)
-    /** (workspaceId, message) of a non-forced worktree.remove failure; the UI may offer a forced retry. */
-    val worktreeRemoveFailure: StateFlow<Pair<String, String>?> = _worktreeRemoveFailure.asStateFlow()
     private val _bulkClosing = MutableStateFlow(false)
     val bulkClosing: StateFlow<Boolean> = _bulkClosing.asStateFlow()
     private val _bulkCloseResult = MutableStateFlow<BulkCloseResult?>(null)
@@ -419,7 +416,6 @@ class HerdrController(private val alerts: AgentAlertListener) {
         _workspaceRequired.value = false
         _pendingTrust.value = null
         _pendingGroupClose.value = null
-        _worktreeRemoveFailure.value = null
         _creationBusy.value = false
         _bulkClosing.value = false
         _bulkCloseResult.value = null
@@ -506,12 +502,6 @@ class HerdrController(private val alerts: AgentAlertListener) {
 
     fun needsTrust(e: Exception) = isTrustError(e)
 
-    fun createWorktree(sourceWorkspaceId: String, branch: String, base: String?, trust: Boolean = false) = launchCreation(WORKTREE_TIMEOUT_MS) { rpc ->
-        if (requestWorktreeCreate(sourceWorkspaceId, branch, base, trust, rpc) == WorktreeOutcome.NEEDS_TRUST)
-            _pendingTrust.value = PendingTrust.Create(sourceWorkspaceId, branch, base)
-        TabCreationOutcome.CREATED
-    }
-
     fun openWorktree(sourceWorkspaceId: String, path: String, trust: Boolean = false) = launchCreation(WORKTREE_TIMEOUT_MS) { rpc ->
         if (requestWorktreeOpen(sourceWorkspaceId, path, trust, rpc) == WorktreeOutcome.NEEDS_TRUST)
             _pendingTrust.value = PendingTrust.Open(sourceWorkspaceId, path)
@@ -522,37 +512,11 @@ class HerdrController(private val alerts: AgentAlertListener) {
         val p = _pendingTrust.value ?: return
         _pendingTrust.value = null
         when (p) {
-            is PendingTrust.Create -> createWorktree(p.sourceWorkspaceId, p.branch, p.base, trust = true)
             is PendingTrust.Open -> openWorktree(p.sourceWorkspaceId, p.path, trust = true)
         }
     }
 
     fun dismissTrust() { _pendingTrust.value = null }
-
-    private val removingWorktrees = mutableSetOf<String>()
-
-    fun removeWorktree(workspaceId: String, force: Boolean) {
-        val c = client ?: run { _errors.tryEmit("操作に失敗しました: 接続されていません"); return }
-        _worktreeRemoveFailure.value = null
-        if (!synchronized(removingWorktrees) { removingWorktrees.add(workspaceId) }) return
-        scope.launch {
-            try {
-                if (client !== c) return@launch
-                c.call("worktree.remove", worktreeRemoveParams(workspaceId, force), WORKTREE_TIMEOUT_MS)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (client !== c) return@launch
-                if (force) _errors.tryEmit(failureText(e))
-                else _worktreeRemoveFailure.value = workspaceId to
-                    (e.message?.lineSequence()?.firstOrNull()?.take(120)?.takeIf { it.isNotBlank() } ?: "削除に失敗しました")
-            } finally {
-                synchronized(removingWorktrees) { removingWorktrees.remove(workspaceId) }
-            }
-        }
-    }
-
-    fun dismissWorktreeRemoveFailure() { _worktreeRemoveFailure.value = null }
 
     /** Closes one workspace; if it has linked worktree workspaces, asks via [pendingGroupClose] before closing them too. */
     fun closeWorkspace(workspaceId: String, group: Boolean = false) {
