@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.asStateFlow
 
 data class AppSettings(
     val extensionsEnabled: Boolean = false,
+    /** 有効にした同梱テンプレートのファイル名(アプリ全体、既定は空 = すべて off)。 */
+    val enabledTemplates: Set<String> = emptySet(),
 )
 
 /** App-wide feature switches; changes are saved immediately. */
@@ -19,7 +21,10 @@ class AppSettingsRepository(context: Context, defaultExtensionsEnabled: () -> Bo
         if (!preferences.contains(KEY_EXTENSIONS)) {
             preferences.edit().putBoolean(KEY_EXTENSIONS, defaultExtensionsEnabled()).apply()
         }
-        mutableSettings = MutableStateFlow(AppSettings(preferences.getBoolean(KEY_EXTENSIONS, false)))
+        mutableSettings = MutableStateFlow(AppSettings(
+            preferences.getBoolean(KEY_EXTENSIONS, false),
+            preferences.getStringSet(KEY_TEMPLATES, null)?.toSet() ?: emptySet(),
+        ))
     }
 
     val settings: StateFlow<AppSettings> = mutableSettings.asStateFlow()
@@ -31,7 +36,18 @@ class AppSettingsRepository(context: Context, defaultExtensionsEnabled: () -> Bo
         mutableSettings.value = mutableSettings.value.copy(extensionsEnabled = enabled)
     }
 
+    val enabledTemplates: Set<String> get() = settings.value.enabledTemplates
+
+    fun setTemplateEnabled(fileName: String, enabled: Boolean) {
+        val next = if (enabled) enabledTemplates + fileName else enabledTemplates - fileName
+        if (next == enabledTemplates) return
+        // getStringSet の返り値は書き換えてはいけないので、毎回新しい集合を渡す。
+        preferences.edit().putStringSet(KEY_TEMPLATES, HashSet(next)).apply()
+        mutableSettings.value = mutableSettings.value.copy(enabledTemplates = next)
+    }
+
     private companion object {
         const val KEY_EXTENSIONS = "extensions_enabled"
+        const val KEY_TEMPLATES = "enabled_templates"
     }
 }

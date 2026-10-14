@@ -8,6 +8,7 @@ import com.shibaken.androidterminal.terminal.CyanVeilTerminalPalette
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import com.shibaken.androidterminal.data.HostRepository
+import com.shibaken.androidterminal.ext.ExtTemplates
 import com.shibaken.androidterminal.ext.ScriptStore
 import com.shibaken.androidterminal.data.KnownHostsRepository
 import com.shibaken.androidterminal.keys.KeyRepository
@@ -35,6 +36,9 @@ class App : Application() {
         private set
     lateinit var scriptStore: ScriptStore
         private set
+
+    /** 同梱の拡張テンプレート(assets は不変なので初回に読んで使い回す)。 */
+    val extTemplates: List<ExtTemplates.Template> by lazy { ExtTemplates.list(assets) }
 
     override fun onCreate() {
         super.onCreate()

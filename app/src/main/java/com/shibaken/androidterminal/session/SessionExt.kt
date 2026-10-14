@@ -8,6 +8,7 @@ import com.shibaken.androidterminal.ext.ExtLoadResult
 import com.shibaken.androidterminal.ext.ExtPane
 import com.shibaken.androidterminal.ext.ExtSummary
 import com.shibaken.androidterminal.ext.ExtSync
+import com.shibaken.androidterminal.ext.ExtTemplates
 import com.shibaken.androidterminal.ext.OutputWatcher
 import com.shibaken.androidterminal.herdr.PaneInfo
 import com.shibaken.androidterminal.ssh.SshConnection
@@ -240,7 +241,12 @@ class SessionExt(
         pruneDisabled(fetched)
         val p = profile
         val scripts = withContext(Dispatchers.IO) {
-            app.scriptStore.loadOrder(p.id, p.extLoadFromHost, p.extDisabled.toSet())
+            // 有効なテンプレート(アプリ全体の設定)を先頭に置く。ホスト別の無効化(extDisabled)の対象外。
+            ExtTemplates.merge(
+                app.extTemplates,
+                app.settings.enabledTemplates,
+                app.scriptStore.loadOrder(p.id, p.extLoadFromHost, p.extDisabled.toSet()),
+            )
         }
         val r: ExtLoadResult = engine.reload(scripts)
         _loadErrors.value = errorsByScript(scripts.map { it.name }, r.errors)

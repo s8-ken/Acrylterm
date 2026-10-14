@@ -18,6 +18,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import android.widget.Toast
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -29,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.shibaken.androidterminal.App
 import com.shibaken.androidterminal.R
 import com.shibaken.androidterminal.ext.ExtSummary
+import com.shibaken.androidterminal.ext.ExtTemplates
 import com.shibaken.androidterminal.ext.ScriptStore
 
 /** Global Lua scripts. Saving reloads every live session that has extensions enabled. */
@@ -43,11 +46,32 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
     // "hostId/name" (host ids never contain '/'); viewing is read-only, importing drives the import dialogs.
     var viewing by rememberSaveable { mutableStateOf<String?>(null) }
     var importing by rememberSaveable { mutableStateOf<String?>(null) }
+    // テンプレートの閲覧(ファイル名)。読み取り専用で、「コピーして編集」で全体スクリプトに複製する。
+    var viewingTemplate by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val appSettings by app.settings.settings.collectAsState()
     val hosts by app.hosts.hosts.collectAsState()
     val hostScripts = hosts.mapNotNull { h ->
         val list = runCatching { store.listHost(h.id) }.getOrDefault(emptyList())
         if (list.isEmpty()) null else h to list
+    }
+
+    viewingTemplate?.let { file ->
+        val t = app.extTemplates.firstOrNull { it.fileName == file }
+        if (t == null) { viewingTemplate = null } else {
+            ScriptEditor("テンプレート / $file", t.source, onSave = {}, onCancel = { viewingTemplate = null }, readOnly = true,
+                extraAction = "コピーして編集" to {
+                    val copy = ExtTemplates.copyName(file, store.listGlobal())
+                    store.writeGlobal(copy, t.source)
+                    // 二重に動かさないよう、コピー元のテンプレートは off にする。
+                    app.settings.setTemplateEnabled(file, false)
+                    app.sessions.reloadExtensions()
+                    names = store.listGlobal()
+                    viewingTemplate = null
+                    editing = copy
+                })
+            return
+        }
     }
 
     viewing?.let { key ->
@@ -113,6 +137,32 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
                             IconButton(onClick = { deleting = name }) {
                                 Icon(Icons.Filled.DeleteOutline, "$name を削除", tint = CyanVeil.Muted)
                             }
+                        }
+                    }
+                }
+                item { SectionHeading("テンプレート", "${app.extTemplates.size} 件", Modifier.padding(top = 4.dp)) }
+                item {
+                    Text("オンにすると拡張を有効にしたホストで動きます。コピーして自由に編集できます。",
+                        color = CyanVeil.Muted, fontSize = 11.sp)
+                }
+                items(app.extTemplates, key = { "t:${it.fileName}" }) { t ->
+                    val on = t.fileName in appSettings.enabledTemplates
+                    val tags = remember(t.fileName) { ExtSummary.parse(t.source) }
+                    Surface(onClick = { viewingTemplate = t.fileName }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+                        color = CyanVeil.Surface, border = BorderStroke(1.dp, CyanVeil.Border)) {
+                        Row(Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Icon(Icons.Filled.Code, null, tint = if (on) CyanVeil.Cyan else CyanVeil.Muted)
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(tags.summary ?: t.fileName, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                ExtTags(tags)
+                                Text(t.fileName, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = CyanVeil.Muted,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            Switch(on, { v ->
+                                app.settings.setTemplateEnabled(t.fileName, v)
+                                app.sessions.reloadExtensions()
+                            }, modifier = Modifier.semantics { contentDescription = "${t.fileName} の有効/無効" })
                         }
                     }
                 }
@@ -217,7 +267,15 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun ScriptEditor(name: String, initial: String, onSave: (String) -> Unit, onCancel: () -> Unit, readOnly: Boolean = false) {
+private fun ScriptEditor(
+    name: String,
+    initial: String,
+    onSave: (String) -> Unit,
+    onCancel: () -> Unit,
+    readOnly: Boolean = false,
+    /** 読み取り専用のときに右下へ出す追加操作(ラベル to 実行内容)。 */
+    extraAction: Pair<String, () -> Unit>? = null,
+) {
     var text by rememberSaveable(name) { mutableStateOf(initial) }
     val background = CyanVeil.Background.copy(alpha = LocalAppearance.current.backgroundOpacity)
     BackHandler(onBack = onCancel)
@@ -240,6 +298,10 @@ private fun ScriptEditor(name: String, initial: String, onSave: (String) -> Unit
             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("${text.count { it == '\n' } + 1} 行", fontSize = 11.sp, color = CyanVeil.Muted)
+                if (readOnly && extraAction != null) Button(onClick = extraAction.second, shape = CircleShape,
+                    modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(extraAction.first, Modifier.padding(horizontal = 8.dp))
+                }
                 if (!readOnly) Button(onClick = { onSave(text) }, shape = CircleShape, modifier = Modifier.heightIn(min = 48.dp)) {
                     Text("保存して反映", Modifier.padding(horizontal = 8.dp))
                 }

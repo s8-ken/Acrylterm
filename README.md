@@ -123,6 +123,7 @@ Mac の場合の手順です。
 - アプリ内で作ったスクリプトに加えて、ホストの `~/.config/acrylterm/*.lua` を接続時に読み込む(ホスト設定の「ホストのスクリプトを読み込む」)
 - 接続中はホスト側の変更を検知して自動で再読込する
 - 「拡張を作る」から、ホストの AI CLI(Claude Code など)にスクリプトを書かせられる
+- 例になるテンプレート(エージェント完了通知、ビルド失敗通知、git マクロなど)を同梱。既定は off で、アプリ全体でオンにでき、コピーして編集できる
 
 詳細は [docs/extensions.md](docs/extensions.md)、API は [app/src/main/assets/ext/API.md](app/src/main/assets/ext/API.md) にあります。
 

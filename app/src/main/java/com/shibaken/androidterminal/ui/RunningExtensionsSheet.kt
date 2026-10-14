@@ -49,6 +49,11 @@ fun RunningExtensionsSheet(ext: SessionExt, session: SshTerminalSession, app: Ap
         entries = withContext(Dispatchers.IO) { app.scriptStore.entries(profile.id, profile.extLoadFromHost) }
             .filter { !it.duplicateOfGlobal }
     }
+    // 有効な同梱テンプレート(アプリ全体の設定)。ホスト別の無効化とは別なので、ここの切り替えは全ホストに効く。
+    val appSettings by app.settings.settings.collectAsState()
+    val templateEntries = app.extTemplates.filter { it.fileName in appSettings.enabledTemplates }.map {
+        ScriptStore.Entry(it.loadName, ScriptStore.Scope.GLOBAL, it.fileName, it.source)
+    }
     var confirmDelete by remember { mutableStateOf<ScriptStore.Entry?>(null) }
     val hostEntries = entries.filter { it.scope == ScriptStore.Scope.HOST }
     val globalEntries = entries.filter { it.scope == ScriptStore.Scope.GLOBAL }
@@ -66,9 +71,9 @@ fun RunningExtensionsSheet(ext: SessionExt, session: SshTerminalSession, app: Ap
                     Text("拡張一覧", fontSize = 23.sp, fontWeight = FontWeight.Medium)
                     Text(profile.displayName + " のみ切り替え", color = CyanVeil.Muted, fontSize = 11.sp)
                 }
-                StatusPill("${entries.count { it.loadName !in disabled }} / ${entries.size}")
+                StatusPill("${entries.count { it.loadName !in disabled } + templateEntries.size} / ${entries.size + templateEntries.size}")
             }
-            if (entries.isEmpty()) Text("拡張はありません", color = CyanVeil.Muted, fontSize = 14.sp)
+            if (entries.isEmpty() && templateEntries.isEmpty()) Text("拡張はありません", color = CyanVeil.Muted, fontSize = 14.sp)
             if (profile.extLoadFromHost && hostEntries.isNotEmpty()) {
                 SectionLabel("このホスト")
                 hostEntries.forEach { e ->
@@ -83,6 +88,16 @@ fun RunningExtensionsSheet(ext: SessionExt, session: SshTerminalSession, app: Ap
                     ExtRow(e, e.loadName !in disabled, errors[e.loadName],
                         deleteEnabled = true,
                         onToggle = { ext.setEnabled(e.loadName, it) }, onDelete = { confirmDelete = e })
+                }
+            }
+            if (templateEntries.isNotEmpty()) {
+                SectionLabel("テンプレート(全ホスト共通)")
+                templateEntries.forEach { e ->
+                    ExtRow(e, true, errors[e.loadName], deleteEnabled = false, showDelete = false,
+                        onToggle = { on ->
+                            app.settings.setTemplateEnabled(e.fileName, on)
+                            app.sessions.reloadExtensions()
+                        }, onDelete = {})
                 }
             }
         }
@@ -118,6 +133,7 @@ private fun ExtRow(
     deleteEnabled: Boolean,
     onToggle: (Boolean) -> Unit,
     onDelete: () -> Unit,
+    showDelete: Boolean = true,
 ) {
     val summary = remember(e.source) { ExtSummary.parse(e.source) }
     var expanded by remember { mutableStateOf(false) }
@@ -134,7 +150,7 @@ private fun ExtRow(
                 }
                 if (error != null && enabled) StatusPill("エラー", CyanVeil.Rose)
                 Switch(enabled, onToggle, modifier = Modifier.semantics { contentDescription = "${e.fileName} の有効/無効" })
-                IconButton(onClick = onDelete, enabled = deleteEnabled) {
+                if (showDelete) IconButton(onClick = onDelete, enabled = deleteEnabled) {
                     Icon(Icons.Filled.Delete, "${e.fileName} を削除", tint = if (deleteEnabled) CyanVeil.Muted else CyanVeil.Border)
                 }
             }

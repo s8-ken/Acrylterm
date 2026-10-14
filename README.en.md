@@ -125,6 +125,7 @@ Available after enabling advanced features in the settings. Enable them per host
 - Besides scripts made in the app, the app loads `~/.config/acrylterm/*.lua` from the host on connect ("ホストのスクリプトを読み込む", load host scripts, in the host settings)
 - While connected, changes on the host are detected and reloaded automatically
 - "拡張を作る" (create extension) has an AI CLI on the host (such as Claude Code) write the script
+- Bundled example templates (agent-done notification, build-failure alert, git macros, and more) are off by default; switch them on app-wide, or copy one to edit it
 
 See [docs/extensions.md](docs/extensions.md) for details (Japanese) and [app/src/main/assets/ext/API.md](app/src/main/assets/ext/API.md) for the API (English).
 
