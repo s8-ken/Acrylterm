@@ -63,6 +63,9 @@ notify(title, body)        -- Android 通知(タップでフォーカス中の�
 toast(text)
 log(...)                   -- tostring をタブ連結。print も同じ
 ssh.exec(cmd [, timeoutSec=15])  -- stdout を返す。失敗は Lua エラー
+timer.after(sec, fn) -> id       -- sec 秒後に 1 回(下限 0.1 秒、上限 24 時間)
+timer.every(sec, fn) -> id       -- 実行完了から sec 秒間隔で繰り返し(下限 1 秒)。5 回連続エラーで自動停止
+timer.cancel(id) -> boolean      -- 取り消し(自身のコールバック内でも可)。タイマーは最大 32 個、再読込で全停止(読込失敗時は旧スクリプトのタイマーを維持)
 panes()                    -- 全ペインの配列
 ```
 - **ペインオブジェクト**: `id` / `title` / `agent`(nil 可) / `status` / `cwd`(nil 可)。メソッドは `:` で呼ぶ: `pane:send(text)`(生テキスト。Enter は `"\r"`)、`pane:send_keys({"enter"})`(herdr のキー名)、`pane:read(n)`(末尾 n 行、既定 40)。SHELL モードでは単一のペイン `id="shell"`。

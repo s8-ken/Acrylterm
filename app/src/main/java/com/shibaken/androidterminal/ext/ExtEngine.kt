@@ -15,8 +15,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 class ExtEngine(
     private val host: ExtHost,
     private val runtime: LuaRuntime = LuaRuntime(),
+    /** タイマーの下限(秒)。テストで短縮するための差し替え口。 */
+    private val minAfterSec: Double = TimerSet.MIN_AFTER_SEC,
+    private val minEverySec: Double = TimerSet.MIN_EVERY_SEC,
 ) {
-    private class Loaded(val regs: Registrations, val api: ExtApi, val globals: org.luaj.vm2.Globals)
+    private class Loaded(val regs: Registrations, val api: ExtApi, val globals: org.luaj.vm2.Globals, val timers: TimerSet)
+
+    private val timerScheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "ext-timer").apply { isDaemon = true }
+    }
 
     @Volatile private var loaded: Loaded? = null
     private val closed = AtomicBoolean(false)
@@ -31,9 +38,21 @@ class ExtEngine(
      */
     suspend fun reload(scripts: List<ExtScript>): ExtLoadResult = withContext(runtime.dispatcher) {
         val regs = Registrations()
-        val api = ExtApi(host, runtime, regs)
         val errors = ArrayList<String>()
         val g = runtime.newGlobals()
+        // タイマーは読み込み世代に属する。成功すれば旧世代のを止めて差し替え、失敗なら新世代のを捨てて旧世代を残す。
+        val timers = TimerSet(
+            schedule = { ms, r -> timerScheduler.schedule(r, ms, java.util.concurrent.TimeUnit.MILLISECONDS) },
+            post = { b -> runtime.post(b) },
+            invoke = { what, fn ->
+                runtime.activate(g)
+                callGuarded(what) { fn.call() }
+            },
+            onAutoCancel = { msg -> try { host.log(msg) } catch (_: Throwable) {} },
+            minAfterSec = minAfterSec,
+            minEverySec = minEverySec,
+        )
+        val api = ExtApi(host, runtime, regs, timers)
         api.install(g)
         for (s in scripts) {
             try {
@@ -42,9 +61,13 @@ class ExtEngine(
                 errors += LuaRuntime.formatError(t).let { if (it.startsWith(s.name)) it else "${s.name}: $it" }
             }
         }
-        if (errors.isEmpty()) {
-            loaded = Loaded(regs, api, g)
+        if (errors.isEmpty() && !closed.get()) {
+            val old = loaded
+            loaded = Loaded(regs, api, g, timers)
+            old?.timers?.cancelAll()
             _registry.value = regs.toRegistry()
+        } else {
+            timers.cancelAll()
         }
         ExtLoadResult(errors, _registry.value)
     }
@@ -134,7 +157,9 @@ class ExtEngine(
     /** Lua スレッドを止める。以後の呼び出しは無視される。 */
     fun close() {
         if (closed.compareAndSet(false, true)) {
+            loaded?.timers?.cancelAll()
             loaded = null
+            timerScheduler.shutdownNow()
             runtime.close()
         }
     }
@@ -148,9 +173,10 @@ class ExtEngine(
         }
     }
 
-    private fun callGuarded(what: String, block: () -> Unit) {
+    private fun callGuarded(what: String, block: () -> Unit): Boolean {
         try {
             runtime.guarded(block)
+            return true
         } catch (t: Throwable) {
             val msg = LuaRuntime.formatError(t)
             try {
@@ -158,6 +184,7 @@ class ExtEngine(
                 host.toast("拡張エラー: ${msg.take(120)}")
             } catch (_: Throwable) {
             }
+            return false
         }
     }
 

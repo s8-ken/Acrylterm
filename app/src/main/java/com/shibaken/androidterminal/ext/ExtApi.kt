@@ -40,6 +40,7 @@ internal class ExtApi(
     private val host: ExtHost,
     private val runtime: LuaRuntime,
     private val regs: Registrations,
+    private val timers: TimerSet,
 ) {
     private val paneMethods = LuaTable()
     private val paneMeta = LuaTable()
@@ -212,6 +213,8 @@ internal class ExtApi(
             LuaValue.valueOf(hostCall("ssh.exec") { runtime.blocking { host.exec(cmd, timeout) } })
         })
         g.set("ssh", ssh)
+
+        timers.install(g) { body -> fn(body) }
 
         g.set("panes", fn { _ ->
             val t = LuaTable()

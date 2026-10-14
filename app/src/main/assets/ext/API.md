@@ -51,6 +51,11 @@ toast("short message")
 log("anything", 1, {})         -- tostring()-joined with tabs, goes to .app/log.txt
 local out = ssh.exec("uname -a", 15) -- run on THIS host, returns stdout; errors raise Lua errors
 local list = panes()               -- all panes
+
+-- Timers (callbacks run on the extension thread like any other callback)
+local id = timer.after(5, function() toast("5s passed") end) -- once; min 0.1 s
+local tid = timer.every(60, function() log(ssh.exec("uptime")) end) -- repeating; min 1 s
+timer.cancel(tid)                  -- true if it existed; also fine inside its own callback
 ```
 
 ### Pane objects
@@ -62,6 +67,7 @@ In plain shell mode there is a single pane with `id = "shell"`.
 - `term.on_output` only sees panes that are currently being displayed (detached/hidden panes are not read). `agent_status` works for all panes.
 - Triggers fire on screen *changes* per row, not on raw byte streams; the same text staying on screen does not re-fire.
 - `ssh.exec` blocks the extension thread until it returns (default timeout 15 s). Scripts run only for the host they came from.
+- Timers: `sec` is clamped to 0.1..86400 (`after`) / 1..86400 (`every`); at most 32 live timers ("too many timers"). `every` waits `sec` after each run finishes (no overlap), keeps running after a callback error, and is cancelled after 5 consecutive errors (logged). All timers are cancelled on reload; a failed reload keeps the old scripts and their timers.
 
 ## Example: notify when an agent needs input
 ```lua

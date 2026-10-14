@@ -311,4 +311,124 @@ class ExtEngineTest {
         load("return (('a'):rep(32000)):find('a+b')")
         assertTrue(System.currentTimeMillis() - t0 < 5_000)
     }
+
+    // ---- timer ----
+
+    private fun timerEngine(): ExtEngine {
+        engine.close()
+        runtime = LuaRuntime(maxInstructions = 200_000, maxWallMillis = 5_000)
+        engine = ExtEngine(host, runtime, minAfterSec = 0.02, minEverySec = 0.05)
+        return engine
+    }
+
+    private fun waitFor(ms: Long = 1500, cond: () -> Boolean): Boolean {
+        val end = System.currentTimeMillis() + ms
+        while (System.currentTimeMillis() < end) { if (cond()) return true; Thread.sleep(5) }
+        return cond()
+    }
+
+    private fun count(tag: String) = host.logs.count { it == tag }
+
+    @Test fun timerAfterFiresOnce() {
+        timerEngine()
+        assertTrue(load("timer.after(0.03, function() log('A') end)").ok)
+        assertTrue(waitFor { count("A") == 1 })
+        Thread.sleep(150)
+        assertEquals(1, count("A"))
+    }
+
+    @Test fun timerEveryRepeatsAndCancelFromOutside() {
+        timerEngine()
+        assertTrue(load("id = timer.every(0.05, function() log('E') end)\ncommand('stop', function() log(tostring(timer.cancel(id)), tostring(timer.cancel(id))) end)").ok)
+        assertTrue(waitFor { count("E") >= 3 })
+        engine.runCommand("stop"); idle()
+        assertTrue(host.logs.toString(), host.logs.contains("true\tfalse"))
+        val n = count("E")
+        Thread.sleep(200)
+        assertEquals(n, count("E"))
+    }
+
+    @Test fun timerCancelFromInsideOwnCallback() {
+        timerEngine()
+        assertTrue(load("n = 0\nid = timer.every(0.05, function() n = n + 1; log('C'); log(tostring(timer.cancel(id))) end)").ok)
+        assertTrue(waitFor { host.logs.contains("true") })
+        Thread.sleep(250)
+        assertEquals(1, count("C"))
+    }
+
+    @Test fun timerLimit32() {
+        timerEngine()
+        val r = load("for i = 1, 32 do timer.after(100, function() end) end\nlocal ok, e = pcall(timer.after, 100, function() end)\nlog(tostring(ok), tostring(e))")
+        assertTrue(r.errors.toString(), r.ok)
+        assertTrue(host.logs.toString(), host.logs.single().contains("too many timers"))
+    }
+
+    @Test fun timerArgChecksAndClamping() {
+        timerEngine()
+        val r = load(
+            """
+            for _, f in ipairs({
+              function() timer.after("x", function() end) end,
+              function() timer.after(0/0, function() end) end,
+              function() timer.every(1, 5) end,
+              function() timer.cancel("a") end,
+            }) do log(tostring(pcall(f))) end
+            """
+        )
+        assertTrue(r.errors.toString(), r.ok)
+        assertEquals(listOf("false", "false", "false", "false"), host.logs.toList())
+        assertEquals(100L, TimerSet.clampMs(0.0, false))
+        assertEquals(1000L, TimerSet.clampMs(0.5, true))
+        assertEquals(1500L, TimerSet.clampMs(1.5, true))
+        assertEquals(86_400_000L, TimerSet.clampMs(1e12, true))
+        assertEquals(86_400_000L, TimerSet.clampMs(Double.POSITIVE_INFINITY, false))
+    }
+
+    @Test fun reloadCancelsOldTimers() {
+        timerEngine()
+        assertTrue(load("timer.every(0.05, function() log('OLD') end)").ok)
+        assertTrue(waitFor { count("OLD") >= 1 })
+        assertTrue(load("-- none").ok)
+        idle()
+        val n = count("OLD")
+        Thread.sleep(250)
+        assertEquals(n, count("OLD"))
+    }
+
+    @Test fun failedReloadKeepsOldTimersAndDropsNewOnes() {
+        timerEngine()
+        assertTrue(load("timer.every(0.05, function() log('OLD') end)").ok)
+        val r = load("timer.every(0.05, function() log('NEW') end)\nerror('bad')")
+        assertFalse(r.ok)
+        val n = count("OLD")
+        assertTrue(waitFor { count("OLD") >= n + 2 })
+        assertEquals(0, count("NEW"))
+    }
+
+    @Test fun everyTimerAutoCancelsAfterFiveConsecutiveErrors() {
+        timerEngine()
+        assertTrue(load("timer.every(0.05, function() error('x') end)").ok)
+        assertTrue(waitFor { host.logs.any { it.contains("cancelled after 5") } })
+        assertEquals(5, host.logs.count { it.startsWith("error in timer.every") })
+        Thread.sleep(200)
+        assertEquals(5, host.logs.count { it.startsWith("error in timer.every") })
+    }
+
+    @Test fun everyTimerKeepsRunningAfterIsolatedError() {
+        timerEngine()
+        assertTrue(load("n = 0\ntimer.every(0.05, function() n = n + 1; if n % 2 == 1 then error('x') end; log('OK') end)").ok)
+        assertTrue(waitFor { count("OK") >= 3 })
+        assertFalse(host.logs.any { it.contains("cancelled after") })
+    }
+
+    @Test fun closeCancelsTimers() {
+        timerEngine()
+        assertTrue(load("timer.every(0.05, function() log('T') end)").ok)
+        assertTrue(waitFor { count("T") >= 1 })
+        engine.close()
+        Thread.sleep(100)
+        val n = count("T")
+        Thread.sleep(200)
+        assertEquals(n, count("T"))
+    }
 }
