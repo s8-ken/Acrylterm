@@ -74,6 +74,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.zIndex
 import com.shibaken.androidterminal.session.GenState
 import androidx.compose.ui.draw.clip
@@ -276,9 +277,6 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                             DropdownMenuItem(text = { Text("タブ一覧") }, onClick = { menu = false; showOverview = true })
                         }
                         DropdownMenuItem(text = { Text("設定") }, onClick = { menu = false; onAppearance() })
-                        if (extensionsEnabled && extRegistry != null && extRegistry.commands.isNotEmpty()) {
-                            DropdownMenuItem(text = { Text("拡張コマンド") }, onClick = { showExtCommands = true; menu = false })
-                        }
                         if (extensionsEnabled && session.profile.extEnabled) {
                             DropdownMenuItem(text = { Text("拡張を再読込") }, onClick = { session.reloadExtensions(fetch = true); menu = false })
                         }
@@ -466,14 +464,15 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                 showPrefixKey = !isPanes,
                 extKeys = extRegistry?.takeIf { extensionsEnabled }?.keys?.map { it.label } ?: emptyList(),
                 onExtKey = { i -> extRt?.engine?.pressKey(i, if (isPanes) focusedPaneId else "shell") },
+                showExtCommands = extensionsEnabled && extRegistry != null && extRegistry.commands.isNotEmpty(),
+                onExtCommands = { showExtCommands = true },
             )
             if (!fullscreen && isPanes && !imeVisible) {
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(100.dp)).background(CyanVeil.Surface)
-                    .clickable { showComposer = true }.padding(horizontal = 12.dp, vertical = 12.dp),
+                    .clickable { showComposer = true }.semantics { contentDescription = "返信を作成" }
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     VeilIcon(R.drawable.veil_edit, null, CyanVeil.Cyan)
-                    Spacer(Modifier.width(12.dp))
-                    Text("日本語で返信を作成…", color = CyanVeil.Muted, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

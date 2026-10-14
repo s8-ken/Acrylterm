@@ -1,6 +1,15 @@
 package com.shibaken.androidterminal.ui
 
 import android.view.KeyEvent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import com.shibaken.androidterminal.R
@@ -51,6 +60,8 @@ fun ExtraKeysBar(
     showPrefixKey: Boolean = true,
     extKeys: List<String> = emptyList(),
     onExtKey: (Int) -> Unit = {},
+    showExtCommands: Boolean = false,
+    onExtCommands: () -> Unit = {},
 ) {
     Column {
     Row(
@@ -62,6 +73,11 @@ fun ExtraKeysBar(
     ) {
         // Pinned: always reachable even when the key row is scrolled.
         Key("⌨", desc = "キーボードの表示/非表示", onTap = onKeyboard)
+        AnimatedVisibility(showExtCommands, enter = fadeIn() + scaleIn(initialScale = .4f), exit = fadeOut() + scaleOut()) {
+            KeyBox("", "拡張コマンド", false, true, Modifier.clickable(onClick = onExtCommands)) {
+                Icon(Icons.Filled.AutoAwesome, null, Modifier.size(20.dp), tint = CyanVeil.Cyan)
+            }
+        }
         Row(
             Modifier.weight(1f).horizontalScroll(rememberScrollState()).semantics { contentDescription = "補助キー" },
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -91,7 +107,7 @@ fun ExtraKeysBar(
 }
 
 @Composable
-private fun KeyBox(label: String, desc: String?, active: Boolean, accent: Boolean, modifier: Modifier) {
+private fun KeyBox(label: String, desc: String?, active: Boolean, accent: Boolean, modifier: Modifier, content: (@Composable () -> Unit)? = null) {
     val bg = when {
         active -> MaterialTheme.colorScheme.primary
         accent -> MaterialTheme.colorScheme.surfaceContainerHighest
@@ -117,7 +133,8 @@ private fun KeyBox(label: String, desc: String?, active: Boolean, accent: Boolea
             .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        if (label == "⌨") VeilIcon(R.drawable.veil_keyboard, null, CyanVeil.Cyan)
+        if (content != null) content()
+        else if (label == "⌨") VeilIcon(R.drawable.veil_keyboard, null, CyanVeil.Cyan)
         else Text(label, color = fg, fontFamily = FontFamily.Monospace, fontSize = 12.sp,
             maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
     }

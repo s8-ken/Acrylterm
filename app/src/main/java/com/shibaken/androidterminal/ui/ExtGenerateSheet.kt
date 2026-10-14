@@ -15,6 +15,12 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.saveable.rememberSaveable
+import android.view.HapticFeedbackConstants
+import kotlinx.coroutines.delay
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.background
@@ -180,17 +186,37 @@ fun ExtResultDialog(state: GenState, onClose: () -> Unit, onEdit: (String) -> Un
     }
 }
 
-/** Small floating round indicator of the generation state: spinning ring (running), check (done), warning (failed). */
+/**
+ * Small floating round indicator of the generation state. Running = outline (spinning ring + sparkle),
+ * done = filled mint with check, breathing glow and unread dot, failed = filled rose "!".
+ * On first appearance it is born with an overshoot pop, two expanding rings and a haptic tick (once per generation).
+ */
 @Composable
 fun ExtActivityBadge(state: GenState, onClick: () -> Unit, modifier: Modifier = Modifier) {
     if (state is GenState.Idle) return
-    val (tint, desc) = when (state) {
-        is GenState.Running -> CyanVeil.Cyan to "拡張を作成中"
-        is GenState.Done -> CyanVeil.Mint to "拡張を作成しました"
-        else -> CyanVeil.Rose to "拡張の作成に失敗"
+    val desc = when (state) {
+        is GenState.Running -> "拡張を作成中"
+        is GenState.Done -> "拡張ができました"
+        else -> "拡張の作成に失敗しました"
     }
+    // Saved so rotation / recomposition of the same generation does not replay the birth.
+    var born by rememberSaveable { mutableStateOf(false) }
+    val birth = remember { Animatable(if (born) 1f else 0f) }
+    val ring1 = remember { Animatable(if (born) 1f else 0f) }
+    val ring2 = remember { Animatable(if (born) 1f else 0f) }
     val pop = remember { Animatable(1f) }
     val shake = remember { Animatable(0f) }
+    val view = LocalView.current
+    LaunchedEffect(Unit) {
+        if (born) return@LaunchedEffect
+        born = true
+        view.performHapticFeedback(
+            if (android.os.Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.KEYBOARD_TAP)
+        launch { ring1.animateTo(1f, tween(600, easing = LinearEasing)) }
+        launch { delay(120); ring2.animateTo(1f, tween(600, easing = LinearEasing)) }
+        birth.animateTo(1.25f, tween(160))
+        birth.animateTo(1f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium))
+    }
     LaunchedEffect(state::class) {
         when (state) {
             is GenState.Done -> {
@@ -203,32 +229,48 @@ fun ExtActivityBadge(state: GenState, onClick: () -> Unit, modifier: Modifier = 
             else -> {}
         }
     }
-    Box(modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value; translationX = shake.value }.size(48.dp).clip(CircleShape).background(CyanVeil.Raised.copy(alpha = .94f))
-        .border(1.dp, tint.copy(alpha = .6f), CircleShape).clickable(onClick = onClick)
-        .semantics { contentDescription = desc }, contentAlignment = Alignment.Center) {
-        when (state) {
-            is GenState.Running -> {
-                val t = rememberInfiniteTransition(label = "extGen")
-                val angle by t.animateFloat(0f, 360f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "ring")
-                val pulse by t.animateFloat(.55f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "pulse")
-                CircularProgressIndicator(progress = { .28f }, modifier = Modifier.size(36.dp).rotate(angle),
-                    strokeWidth = 2.dp, color = CyanVeil.Cyan, trackColor = Color.Transparent)
-                Icon(Icons.Filled.AutoAwesome, null, Modifier.size(18.dp).alpha(pulse), tint = CyanVeil.Cyan)
+    val breathe = rememberInfiniteTransition(label = "extBreathe")
+    val glow by breathe.animateFloat(.15f, .45f, infiniteRepeatable(tween(1600), RepeatMode.Reverse), label = "glow")
+    val done = state is GenState.Done
+    // Outer box is deliberately not clipped: rings and glow are drawn beyond its 48dp bounds.
+    Box(modifier.size(48.dp).drawBehind {
+        val r = size.minDimension / 2f
+        for (a in listOf(ring1, ring2)) {
+            val p = a.value
+            if (p > 0f && p < 1f) drawCircle(CyanVeil.Cyan.copy(alpha = .6f * (1f - p)), radius = r * (1f + 1.2f * p), style = Stroke(2.dp.toPx()))
+        }
+        if (done) drawCircle(CyanVeil.Mint.copy(alpha = glow), radius = r * 1.4f)
+    }, contentAlignment = Alignment.Center) {
+        val fill = when (state) { is GenState.Done -> CyanVeil.Mint; is GenState.Running -> CyanVeil.Background.copy(alpha = .85f); else -> CyanVeil.Rose }
+        val edge = if (state is GenState.Running) CyanVeil.Cyan.copy(alpha = .7f) else Color.Transparent
+        Box(Modifier.fillMaxSize().graphicsLayer { val sc = birth.value * pop.value; scaleX = sc; scaleY = sc; translationX = shake.value }
+            .clip(CircleShape).background(fill).border(1.dp, edge, CircleShape).clickable(onClick = onClick)
+            .semantics { contentDescription = desc }, contentAlignment = Alignment.Center) {
+            when (state) {
+                is GenState.Running -> {
+                    val t = rememberInfiniteTransition(label = "extGen")
+                    val angle by t.animateFloat(0f, 360f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "ring")
+                    val pulse by t.animateFloat(.55f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "pulse")
+                    CircularProgressIndicator(progress = { .28f }, modifier = Modifier.size(36.dp).rotate(angle),
+                        strokeWidth = 2.dp, color = CyanVeil.Cyan, trackColor = Color.Transparent)
+                    Icon(Icons.Filled.AutoAwesome, null, Modifier.size(18.dp).alpha(pulse), tint = CyanVeil.Cyan)
+                }
+                is GenState.Done -> Icon(Icons.Filled.Check, null, Modifier.size(26.dp), tint = CyanVeil.Ink)
+                else -> Text("!", color = CyanVeil.Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             }
-            is GenState.Done -> {
-                Icon(Icons.Filled.Check, null, Modifier.size(24.dp), tint = tint)
-                Box(Modifier.align(Alignment.TopEnd).padding(9.dp).size(7.dp).clip(CircleShape).background(CyanVeil.Mint))
-            }
-            else -> Icon(Icons.Filled.Warning, null, Modifier.size(22.dp), tint = tint)
+        }
+        if (done) {
+            Box(Modifier.align(Alignment.TopEnd).graphicsLayer { val sc = birth.value * pop.value; scaleX = sc; scaleY = sc }
+                .size(13.dp).clip(CircleShape).background(CyanVeil.Amber).border(2.dp, CyanVeil.Background, CircleShape))
         }
     }
 }
 
-/** Static look of the badge's glyph (circle + sparkle), used by the launch flight overlay. */
+/** Static look of the badge's glyph (outline circle + sparkle), used by the launch flight overlay. */
 @Composable
 fun ExtLaunchGlyph(modifier: Modifier = Modifier) {
-    Box(modifier.size(48.dp).clip(CircleShape).background(CyanVeil.Raised.copy(alpha = .94f))
-        .border(1.dp, CyanVeil.Cyan.copy(alpha = .6f), CircleShape), contentAlignment = Alignment.Center) {
+    Box(modifier.size(48.dp).clip(CircleShape).background(CyanVeil.Background.copy(alpha = .85f))
+        .border(1.dp, CyanVeil.Cyan.copy(alpha = .7f), CircleShape), contentAlignment = Alignment.Center) {
         Icon(Icons.Filled.AutoAwesome, null, Modifier.size(18.dp), tint = CyanVeil.Cyan)
     }
 }
