@@ -49,4 +49,43 @@ class ScriptStoreTest {
         assertEquals(listOf("c.lua"), s.listHost("h1"))
         assertEquals(listOf("z.lua"), s.loadOrder("other", true).map { it.name })
     }
+
+    @Test fun readHostAndListHostIds() {
+        val s = ScriptStore(tmp.root)
+        assertEquals(emptyList<String>(), s.listHostIds())
+        s.replaceHost("h2", listOf(ExtScript("a.lua", "A2")))
+        s.replaceHost("h1", listOf(ExtScript("a.lua", "A1")))
+        java.io.File(tmp.root, "hosts/bad id").mkdirs()
+        assertEquals(listOf("h1", "h2"), s.listHostIds())
+        assertEquals("A1", s.readHost("h1", "a.lua"))
+        assertNull(s.readHost("h1", "none.lua"))
+    }
+
+    @Test fun importHostToGlobal() {
+        val s = ScriptStore(tmp.root)
+        s.replaceHost("h1", listOf(ExtScript("a.lua", "HA")))
+        assertTrue(s.importHostToGlobal("h1", "a.lua"))
+        assertEquals("HA", s.readGlobal("a.lua"))
+        // conflict without overwrite leaves global unchanged
+        s.writeGlobal("a.lua", "mine")
+        assertFalse(s.importHostToGlobal("h1", "a.lua"))
+        assertEquals("mine", s.readGlobal("a.lua"))
+        // overwrite
+        assertTrue(s.importHostToGlobal("h1", "a.lua", overwrite = true))
+        assertEquals("HA", s.readGlobal("a.lua"))
+        // rename
+        assertTrue(s.importHostToGlobal("h1", "a.lua", asName = "b.lua"))
+        assertEquals("HA", s.readGlobal("b.lua"))
+        // missing host script
+        assertFalse(s.importHostToGlobal("h1", "none.lua"))
+        assertNull(s.readGlobal("none.lua"))
+    }
+
+    @Test fun loadOrderSkipsImportedHostScripts() {
+        val s = ScriptStore(tmp.root)
+        s.replaceHost("h1", listOf(ExtScript("foo.lua", "X"), ExtScript("bar.lua", "Y")))
+        s.writeGlobal("foo.lua", "X")
+        s.writeGlobal("bar.lua", "changed")
+        assertEquals(listOf("bar.lua", "foo.lua", "host:bar.lua"), s.loadOrder("h1", true).map { it.name })
+    }
 }

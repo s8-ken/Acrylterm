@@ -30,7 +30,9 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppearanceScreen(onBack: () -> Unit) {
-    val repository = (LocalContext.current.applicationContext as App).appearance
+    val app = LocalContext.current.applicationContext as App
+    val repository = app.appearance
+    val appSettings by app.settings.settings.collectAsState()
     val saved by repository.settings.collectAsState()
     var transparency by rememberSaveable { mutableIntStateOf(saved.transparencyPercent) }
     var blurred by rememberSaveable { mutableStateOf(saved.blurBackground) }
@@ -42,7 +44,7 @@ fun AppearanceScreen(onBack: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     VeilIconButton(R.drawable.veil_back, "戻る", onBack)
                     Column {
-                        Text("外観設定", fontSize = 23.sp, fontWeight = FontWeight.Medium)
+                        Text("設定", fontSize = 23.sp, fontWeight = FontWeight.Medium)
                         Text("自分に合う、夜のターミナル。", fontSize = 11.sp, color = CyanVeil.Muted)
                     }
                 }
@@ -93,6 +95,12 @@ fun AppearanceScreen(onBack: () -> Unit) {
                     }
                     TextButton(onClick = { transparency = 28; blurred = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                         Text("おすすめの設定に戻す")
+                    }
+                    VeilCard(Modifier.fillMaxWidth()) {
+                        SectionHeading("高度な機能", "")
+                        SwitchRow("拡張機能 (Lua)", "補助キー・コマンド・マクロを Lua で追加", appSettings.extensionsEnabled) {
+                            app.settings.setExtensionsEnabled(it)
+                        }
                     }
                 }
                 Button(onClick = { repository.save(draft); onBack() }, shape = CircleShape,

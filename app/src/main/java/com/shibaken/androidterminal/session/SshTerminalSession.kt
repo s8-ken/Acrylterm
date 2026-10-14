@@ -104,7 +104,7 @@ class SshTerminalSession(
     }
 
     private fun afterConnected(c: SshConnection) {
-        if (!profile.extEnabled) {
+        if (!profile.extEnabled || !app.settings.extensionsEnabled) {
             _ext.value?.let { it.close(); _ext.value = null }
             return
         }

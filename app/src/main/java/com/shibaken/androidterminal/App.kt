@@ -1,6 +1,7 @@
 package com.shibaken.androidterminal
 
 import android.app.Application
+import com.shibaken.androidterminal.data.AppSettingsRepository
 import com.shibaken.androidterminal.data.AppearanceRepository
 import com.shibaken.androidterminal.terminal.CyanVeilTerminalPalette
 import android.app.NotificationChannel
@@ -18,6 +19,8 @@ import java.security.Security
 class App : Application() {
 
     lateinit var appearance: AppearanceRepository
+        private set
+    lateinit var settings: AppSettingsRepository
         private set
     lateinit var hosts: HostRepository
         private set
@@ -45,6 +48,9 @@ class App : Application() {
         keys = KeyRepository(this)
         tailscale = TailscaleManager(this)
         scriptStore = ScriptStore(File(filesDir, "ext"))
+        settings = AppSettingsRepository(this) {
+            hosts.hosts.value.any { it.extEnabled } || scriptStore.listGlobal().isNotEmpty()
+        }
         sessions = SessionManager(this)
     }
 

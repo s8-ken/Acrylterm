@@ -104,6 +104,8 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     val context = LocalContext.current
     val app = context.applicationContext as App
     val session = remember(sessionId) { app.sessions.get(sessionId) }
+    val appSettings by app.settings.settings.collectAsState()
+    val extensionsEnabled = appSettings.extensionsEnabled
     if (session == null) {
         Box(Modifier.fillMaxSize().systemBarsPadding(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -178,6 +180,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     val extRt by session.ext.collectAsState()
     val extRegistry = extRt?.engine?.registry?.collectAsState()?.value
     var showExtCommands by remember { mutableStateOf(false) }
+    var showExtGenerate by remember { mutableStateOf(false) }
     var showOverview by remember { mutableStateOf(false) }
     var showComposer by remember { mutableStateOf(false) }
 
@@ -256,12 +259,15 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                             DropdownMenuItem(text = { Text("ワークスペースを開く") }, onClick = { menu = false; scope.launch { drawerState.open() } })
                             DropdownMenuItem(text = { Text("タブ一覧") }, onClick = { menu = false; showOverview = true })
                         }
-                        DropdownMenuItem(text = { Text("外観設定") }, onClick = { menu = false; onAppearance() })
-                        if (extRegistry != null && extRegistry.commands.isNotEmpty()) {
+                        DropdownMenuItem(text = { Text("設定") }, onClick = { menu = false; onAppearance() })
+                        if (extensionsEnabled && extRegistry != null && extRegistry.commands.isNotEmpty()) {
                             DropdownMenuItem(text = { Text("拡張コマンド") }, onClick = { showExtCommands = true; menu = false })
                         }
-                        if (session.profile.extEnabled) {
+                        if (extensionsEnabled && session.profile.extEnabled) {
                             DropdownMenuItem(text = { Text("拡張を再読込") }, onClick = { session.reloadExtensions(fetch = true); menu = false })
+                        }
+                        if (extensionsEnabled && session.profile.extEnabled && session.profile.extLoadFromHost && extRt != null) {
+                            DropdownMenuItem(text = { Text("拡張を作成") }, onClick = { showExtGenerate = true; menu = false })
                         }
                         DropdownMenuItem(text = { Text("貼り付け") }, onClick = { pasteTarget?.pasteFromClipboard(); menu = false })
                         DropdownMenuItem(text = { Text("文字を大きく") }, onClick = { activeView.textSizeSp += 1f; menu = false })
@@ -315,7 +321,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                         Text("入力待ち ${herdrState.blockedCount}", style = MaterialTheme.typography.labelMedium, color = StatusColors.blocked)
                     }
                 }
-                VeilIconButton(R.drawable.veil_tune, "外観設定", onAppearance)
+                VeilIconButton(R.drawable.veil_tune, "設定", onAppearance)
                 sessionMenu()
             }
 
@@ -439,7 +445,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                 onAlt = { modifiers.alt = !modifiers.alt },
                 onKeyboard = { activeView.toggleKeyboard() },
                 showPrefixKey = !isPanes,
-                extKeys = extRegistry?.keys?.map { it.label } ?: emptyList(),
+                extKeys = extRegistry?.takeIf { extensionsEnabled }?.keys?.map { it.label } ?: emptyList(),
                 onExtKey = { i -> extRt?.engine?.pressKey(i, if (isPanes) focusedPaneId else "shell") },
             )
             if (!fullscreen && isPanes && !imeVisible) {
@@ -497,12 +503,17 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
             } }, confirmButton = { TextButton(onClick = { herdr?.dismissBulkCloseResult() }) { Text("OK") } })
     }
 
-    if (showExtCommands && extRt != null) {
+    if (extensionsEnabled && showExtCommands && extRt != null) {
         ExtensionCommandsSheet(commands = extRegistry?.commands.orEmpty(),
             onRun = { name -> extRt?.engine?.runCommand(name); showExtCommands = false },
             onDismiss = { showExtCommands = false })
     }
 
+    if (extensionsEnabled && showExtGenerate) {
+        extRt?.let { rt ->
+            ExtGenerateSheet(ext = rt, hostId = session.profile.id, scriptStore = app.scriptStore, onDismiss = { showExtGenerate = false })
+        }
+    }
 
     if (showComposer && herdr != null) {
         val pid = herdrState.focusedPaneId

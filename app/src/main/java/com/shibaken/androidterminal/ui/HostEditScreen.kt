@@ -55,6 +55,8 @@ import com.shibaken.androidterminal.data.HostProfile
 @Composable
 fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit) {
     val app = LocalContext.current.applicationContext as App
+    val appSettings by app.settings.settings.collectAsState()
+    val extensionsAvailable = appSettings.extensionsEnabled
     val original = remember(hostId) { hostId?.let { app.hosts.get(it) } ?: HostProfile() }
     val keys by app.keys.keys.collectAsState()
     val ts by app.tailscale.status.collectAsState()
@@ -72,6 +74,7 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
     var herdrSession by remember { mutableStateOf(original.herdrSession) }
     var extEnabled by remember { mutableStateOf(original.extEnabled) }
     var extFromHost by remember { mutableStateOf(original.extLoadFromHost) }
+    var extAgent by remember { mutableStateOf(original.extAgentCommand) }
     var confirmDelete by remember { mutableStateOf(false) }
 
     val valid = host.isNotBlank() && user.isNotBlank() && (port.toIntOrNull() ?: 0) in 1..65535 &&
@@ -85,6 +88,7 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
                 useTailscale = useTs, herdrEnabled = herdr, useMosh = useMosh,
                 startupCommand = startup.trim(), herdrSession = herdrSession.trim(),
                 extEnabled = extEnabled, extLoadFromHost = extEnabled && extFromHost,
+                extAgentCommand = extAgent.trim().ifBlank { HostProfile().extAgentCommand },
             )
         )
         onDone()
@@ -170,11 +174,15 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
                     SwitchRow("マルチタブ / マルチペイン", "タブと画面分割を使い、エージェントの入力待ちを通知します", herdr) { herdr = it }
                     if (herdr) SwitchRow("Mosh", "ペインを Mosh で表示(回線が切り替わっても維持)。mosh-server が必要", useMosh) { useMosh = it }
                 }
-                VeilCard(Modifier.fillMaxWidth()) {
+                if (extensionsAvailable) VeilCard(Modifier.fillMaxWidth()) {
                     SectionHeading("拡張スクリプト", "LUA")
                     SwitchRow("このホストで有効にする", "補助キー・コマンド・クイック返信をカスタマイズ", extEnabled) { extEnabled = it }
                     SwitchRow("ホストのスクリプトを読み込む", "接続先の Lua を共通スクリプトに追加", extFromHost && extEnabled,
                         enabled = extEnabled) { extFromHost = it }
+                    OutlinedTextField(
+                        extAgent, { extAgent = it }, label = { Text("生成に使う AI コマンド") }, singleLine = true,
+                        enabled = extEnabled && extFromHost, modifier = Modifier.fillMaxWidth(),
+                    )
                 }
 
                 if (!herdr) {

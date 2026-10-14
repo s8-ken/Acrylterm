@@ -37,6 +37,7 @@ fun HostListScreen(
 ) {
     val app = LocalContext.current.applicationContext as App
     val hosts by app.hosts.hosts.collectAsState()
+    val appSettings by app.settings.settings.collectAsState()
     val sessions by app.sessions.sessions.collectAsState()
     val ts by app.tailscale.status.collectAsState()
     VeilBackdrop(Modifier.fillMaxSize()) {
@@ -46,7 +47,7 @@ fun HostListScreen(
                     Text(stringResource(R.string.app_name), fontSize = 25.sp, fontWeight = FontWeight.Medium)
                     Text("YOUR PRIVATE CONNECTION", fontSize = 10.sp, letterSpacing = 1.sp, color = CyanVeil.Muted)
                 }
-                VeilIconButton(R.drawable.veil_tune, "外観設定", onAppearance)
+                VeilIconButton(R.drawable.veil_tune, "設定", onAppearance)
             }
             Box(Modifier.weight(1f)) {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 104.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -84,7 +85,7 @@ fun HostListScreen(
                             }
                         }
                     }
-                    item {
+                    if (appSettings.extensionsEnabled) item {
                         FilledTonalButton(onExtScripts, Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                             Icon(Icons.Filled.Code, null, tint = CyanVeil.Cyan)
                             Spacer(Modifier.width(8.dp))

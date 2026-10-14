@@ -24,6 +24,24 @@ class ScriptStore(private val root: File) {
 
     fun listHost(hostId: String): List<String> = listNames(hostDir(hostId))
 
+    fun readHost(hostId: String, name: String): String? = read(File(hostDir(hostId), checkName(name)))
+
+    /** キャッシュを持つホスト ID(`hosts/` 配下の有効なディレクトリ名)を名前順で返す。 */
+    fun listHostIds(): List<String> =
+        File(root, "hosts").listFiles()?.filter { it.isDirectory && isValidId(it.name) }?.map { it.name }?.sorted() ?: emptyList()
+
+    /**
+     * ホストのスクリプトを全体へコピーする。ホスト側に無い、または全体に [asName] が既にあり
+     * [overwrite] でない場合は何も書かず false を返す。
+     */
+    fun importHostToGlobal(hostId: String, name: String, asName: String = name, overwrite: Boolean = false): Boolean {
+        val target = File(globalDir, checkName(asName))
+        val source = readHost(hostId, name) ?: return false
+        if (target.exists() && !overwrite) return false
+        write(target, source)
+        return true
+    }
+
     /** ホストのキャッシュを [scripts] で置き換える。不正な名前のものは無視する。 */
     fun replaceHost(hostId: String, scripts: List<ExtScript>) {
         val dir = hostDir(hostId)
@@ -38,13 +56,18 @@ class ScriptStore(private val root: File) {
     /**
      * 読み込み順: 全体スクリプト(ファイル名順)→ホストのスクリプト(同)。
      * 名前はエラー表示用で、全体は `foo.lua`、ホストは `host:foo.lua`。
+     * 全体に同名・同一内容のスクリプトがある場合(取り込み済み)、ホスト側は二重読み込みを避けて除く。
      */
     fun loadOrder(hostId: String?, includeHost: Boolean): List<ExtScript> {
         val out = ArrayList<ExtScript>()
         for (n in listGlobal()) readGlobal(n)?.let { out += ExtScript(n, it) }
         if (includeHost && hostId != null) {
             val dir = hostDir(hostId)
-            for (n in listNames(dir)) read(File(dir, n))?.let { out += ExtScript("host:$n", it) }
+            for (n in listNames(dir)) {
+                val src = read(File(dir, n)) ?: continue
+                if (readGlobal(n) == src) continue
+                out += ExtScript("host:$n", src)
+            }
         }
         return out
     }

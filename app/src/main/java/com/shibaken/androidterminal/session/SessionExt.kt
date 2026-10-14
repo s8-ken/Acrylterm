@@ -39,6 +39,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+sealed interface GenState {
+    data object Idle : GenState
+    data class Running(val name: String) : GenState
+    data class Done(val name: String) : GenState
+    data class Failed(val name: String, val message: String) : GenState
+}
+
 /**
  * One session's Lua extension runtime: owns the [ExtEngine], implements [ExtHost] against the session,
  * syncs scripts from the host, and feeds screen / agent events to the engine.
@@ -235,6 +242,60 @@ class SessionExt(
     private suspend fun writeLog(c: SshConnection) {
         val text = synchronized(logBuf) { logBuf.joinToString("\n") } + "\n"
         writeBack(c, "log.txt", text)
+    }
+
+    // --- generate (ask the host's AI CLI to write a script) -----------------------------------
+
+    private val _genState = MutableStateFlow<GenState>(GenState.Idle)
+    val genState: StateFlow<GenState> = _genState.asStateFlow()
+
+    /** Resets a finished ([GenState.Done] / [GenState.Failed]) state to idle. */
+    fun clearGenState() {
+        if (_genState.value !is GenState.Running) _genState.value = GenState.Idle
+    }
+
+    /** Ask the host's AI CLI to write (or modify) host script [name]; survives leaving the screen. */
+    fun generate(name: String, request: String) {
+        if (_genState.value is GenState.Running) return
+        _genState.value = GenState.Running(name)
+        scope.launch {
+            appendLog("生成を開始: $name")
+            fun fail(msg: String) {
+                appendLog("生成に失敗: $name ($msg)")
+                _genState.value = GenState.Failed(name, msg)
+            }
+            try {
+                val c = session.currentConn()?.takeIf { it.isConnected }
+                if (c == null) return@launch fail("未接続")
+                val (existing, apiDoc) = withContext(Dispatchers.IO) {
+                    app.scriptStore.readHost(session.profile.id, name) to loadApiDoc()
+                }
+                val prompt = ExtSync.generatePrompt(name, request, apiDoc, existing)
+                val nonce = ExtSync.newNonce()
+                val cmd = ExtSync.generateCommand(session.profile.extAgentCommand, prompt, nonce)
+                val out = c.execAll(com.shibaken.androidterminal.ssh.RemoteCommand.viaLoginShell(cmd), 300_000)
+                val r = ExtSync.parseGenerateOutput(out, nonce)
+                when {
+                    r.exitCode == null -> return@launch fail("時間切れ")
+                    r.exitCode != 0 -> return@launch fail("終了コード ${r.exitCode}: ${r.stderr.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().take(200)}")
+                }
+                val code = ExtSync.extractLua(r.stdout)
+                if (code.isBlank()) return@launch fail("出力が空")
+                for (w in ExtSync.writeScriptCommands(name, code)) c.execAll(w, 15_000)
+                reloadNow(fetch = true)
+                appendLog("生成完了: $name")
+                _genState.value = GenState.Done(name)
+                session.postNotice("拡張を作成しました: $name")
+            } catch (e: CancellationException) {
+                _genState.value = GenState.Idle
+                throw e
+            } catch (e: Exception) {
+                fail(e.message ?: e.javaClass.simpleName)
+            } catch (e: Error) {
+                fail(e.javaClass.simpleName)
+                throw e
+            }
+        }
     }
 
     private suspend fun loadApiDoc(): String = withContext(Dispatchers.IO) {
