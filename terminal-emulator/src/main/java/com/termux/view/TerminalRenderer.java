@@ -60,8 +60,14 @@ public final class TerminalRenderer {
     /** Render the terminal to a canvas with at a specified row scroll, and an optional rectangular selection. */
     public final void render(TerminalEmulator mEmulator, Canvas canvas, int topRow,
                              int selectionY1, int selectionY2, int selectionX1, int selectionX2) {
+        render(mEmulator, canvas, topRow, mEmulator.mRows, selectionY1, selectionY2, selectionX1, selectionX2);
+    }
+
+    /** As above, drawing [numRows] rows from topRow (mRows + 1 lets a pixel-scrolled view cover the partial edge row). */
+    public final void render(TerminalEmulator mEmulator, Canvas canvas, int topRow, int numRows,
+                             int selectionY1, int selectionY2, int selectionX1, int selectionX2) {
         final boolean reverseVideo = mEmulator.isReverseVideo();
-        final int endRow = topRow + mEmulator.mRows;
+        final int endRow = topRow + numRows;
         final int columns = mEmulator.mColumns;
         final int cursorCol = mEmulator.getCursorCol();
         final int cursorRow = mEmulator.getCursorRow();

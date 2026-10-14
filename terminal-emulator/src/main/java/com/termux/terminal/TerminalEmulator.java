@@ -481,6 +481,10 @@ public final class TerminalEmulator {
                 return DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE;
             case 1002:
                 return DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT;
+            case 1003:
+                // Any-event tracking. mosh-server collapses herdr's 1000/1002/1003 to 1003 only, so treating
+                // it as unsupported turned mouse tracking off over Mosh (wheel became arrow keys).
+                return DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT;
             case 1004:
                 return DECSET_BIT_SEND_FOCUS_EVENTS;
             case 1006:

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -94,8 +95,10 @@ import com.shibaken.androidterminal.session.GenState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.graphics.graphicsLayer
@@ -251,13 +254,16 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     LaunchedEffect(showComposer, imeVisible) {
         if (!showComposer && !imeVisible) { kotlinx.coroutines.delay(600); composerHold = false }
     }
-    val imeLive = WindowInsets.ime
+    // Layout follows the IME's animation TARGET, not its per-frame value: the terminal changes size once per
+    // show/hide instead of ~15 times (each of which reflowed and sent a PTY resize -> visible jitter).
+    val imeLive = WindowInsets.imeAnimationTarget
+    val imeTargetVisible = imeLive.getBottom(LocalDensity.current) > 0
     val freezeTerminalHeight = showComposer || composerHold
     // IME state as the layout sees it: also frozen, because rows that hide while the IME is up change the terminal's height.
     val imeInsets = remember { FreezableImeInsets(imeLive) }
     SideEffect { imeInsets.frozen = freezeTerminalHeight }
-    val imeHolder = remember { booleanArrayOf(imeVisible) }
-    if (!freezeTerminalHeight) imeHolder[0] = imeVisible
+    val imeHolder = remember { booleanArrayOf(imeTargetVisible) }
+    if (!freezeTerminalHeight) imeHolder[0] = imeTargetVisible
     val imeForLayout = imeHolder[0]
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -471,7 +477,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                     ) }
                     val waiting = herdrState.tabs.firstOrNull { tab -> tab.tabId != herdrState.focusedTabId &&
                         herdrState.panes.any { it.tabId == tab.tabId && it.agentStatus == AgentStatus.BLOCKED } }
-                    if (!fullscreen && !imeForLayout && waiting != null) Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
+                    if (!fullscreen && waiting != null) Row(Modifier.hideWhenIme(imeInsets).fillMaxWidth().clip(MaterialTheme.shapes.medium)
                         .background(CyanVeil.Raised).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("! ${waiting.title} が入力待ち", Modifier.weight(1f), color = CyanVeil.Amber, style = MaterialTheme.typography.labelSmall,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -486,9 +492,10 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
             if (!fullscreen && herdr != null && herdrState.phase == HerdrState.Phase.READY) {
                 if (!isPanes) HerdrTabStrip(herdrState, herdr, onOpenOverview = { showOverview = true }, menu = {})
                 // Legacy TUI mode only (native panes need none); hidden while the IME is up to leave rows for the terminal.
-                if (!isPanes && !imeForLayout) {
+                if (!isPanes) {
                     Row(
                         Modifier
+                            .hideWhenIme(imeInsets)
                             .fillMaxWidth()
                             .background(MaterialTheme.colorScheme.surfaceContainer)
                             .horizontalScroll(rememberScrollState()),
@@ -519,8 +526,8 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                 showExtCommands = extensionsEnabled && extRegistry != null && extRegistry.commands.isNotEmpty(),
                 onExtCommands = { showExtCommands = true },
             )
-            if (!fullscreen && isPanes && !imeForLayout) {
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(100.dp)).background(CyanVeil.Surface)
+            if (!fullscreen && isPanes) {
+                Row(Modifier.hideWhenIme(imeInsets).fillMaxWidth().clip(RoundedCornerShape(100.dp)).background(CyanVeil.Surface)
                     .clickable { showComposer = true }.semantics { contentDescription = "返信を作成" }
                     .padding(horizontal = 12.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically) {
@@ -692,6 +699,15 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
             dismissButton = { TextButton(onClick = { confirmClosePane = false }) { Text("キャンセル") } },
         )
     }
+}
+
+/**
+ * Collapses the content to zero size while the (target) IME inset is non-zero. Evaluated in the layout phase,
+ * in the same pass as the padding that follows [FreezableImeInsets], so the terminal resizes once, not twice.
+ */
+private fun Modifier.hideWhenIme(insets: WindowInsets): Modifier = layout { measurable, constraints ->
+    if (insets.getBottom(this) > 0) layout(0, 0) {}
+    else measurable.measure(constraints).let { p -> layout(p.width, p.height) { p.place(0, 0) } }
 }
 
 /**

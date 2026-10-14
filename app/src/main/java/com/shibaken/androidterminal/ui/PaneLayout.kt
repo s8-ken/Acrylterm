@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.ZoomInMap
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -37,6 +38,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,6 +61,7 @@ import com.shibaken.androidterminal.session.SshTerminalSession
 import com.shibaken.androidterminal.terminal.Modifiers
 import com.shibaken.androidterminal.terminal.TerminalCanvasView
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -287,8 +290,15 @@ private fun PaneItem(
     onPaneSwipe: ((Int) -> Unit)?,
     modifier: Modifier,
 ) {
-    DisposableEffect(view) {
+    val scope = rememberCoroutineScope()
+    var inHistory by remember(view) { mutableStateOf(view.inHistory) }
+    DisposableEffect(view, paneId) {
+        // Local history scroller: fetch the pane's scrollback from herdr instead of forwarding wheel events.
+        view.historyFetcher = { lines, result -> scope.launch { result(herdr.readPaneHistory(paneId, lines)) } }
+        view.onHistoryChanged = { inHistory = it }
         onDispose {
+            view.historyFetcher = null; view.onHistoryChanged = null
+            view.exitHistory()
             view.session = null
             view.onFocusRequest = null; view.onDoubleTap = null; view.onTwoFingerSwipe = null
             view.onPaneSwipe = null
@@ -323,6 +333,13 @@ private fun PaneItem(
             QuickReplyBar(paneId, backend, herdr, ext, onOpenComposer, Modifier.fillMaxWidth().height(QuickReplyBarHeight))
         }
       }
+        if (inHistory && focused) {
+            IconButton(
+                onClick = { view.exitHistory() },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp).size(40.dp)
+                    .background(Color.Black.copy(alpha = 0.55f), CircleShape),
+            ) { Icon(Icons.Filled.KeyboardArrowDown, "最新へ", Modifier.size(24.dp), tint = Color.White) }
+        }
         if (focused && !attached) {
             // Not attached yet: input would be dropped. Dim + small spinner (no text).
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))

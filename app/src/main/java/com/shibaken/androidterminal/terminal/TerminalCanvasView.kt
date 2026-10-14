@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -63,6 +64,8 @@ class TerminalCanvasView @JvmOverloads constructor(
     var session: TerminalBackend? = null
         set(value) {
             field?.onScreenUpdate = null
+            cancelHistory()
+            dropHistoryCache()
             field = value
             value?.onScreenUpdate = { onScreenUpdated() }
             clearSelection()
@@ -97,6 +100,7 @@ class TerminalCanvasView @JvmOverloads constructor(
             val v = value.coerceIn(6f, 32f)
             if (field == v) return
             field = v
+            if (holdActive) endHold()
             createRenderer()
             updateSize()
             invalidate()
@@ -112,7 +116,7 @@ class TerminalCanvasView @JvmOverloads constructor(
     var isPaneFocused: Boolean = true
         set(value) {
             field = value
-            if (!value) clearSelection()
+            if (!value) { clearSelection(); cancelHistory() }
             isFocusable = value
             isFocusableInTouchMode = value
         }
@@ -126,12 +130,31 @@ class TerminalCanvasView @JvmOverloads constructor(
     /** One-finger horizontal swipe: -1 = previous pane, +1 = next pane. Set only while panes are paged (single mode). */
     var onPaneSwipe: ((Int) -> Unit)? = null
 
+    /**
+     * Panes mode: fetches the pane's recent output (ANSI, [HistoryMath.FETCH_LINES] lines) from the host and
+     * delivers it on the main thread (null on failure). When set, scrolling a mouse-tracking pane enters the
+     * local history view instead of forwarding wheel events.
+     */
+    var historyFetcher: ((lines: Int, result: (String?) -> Unit) -> Unit)? = null
+
+    /** True while the local history view is shown (for the floating "latest" button). */
+    var onHistoryChanged: ((Boolean) -> Unit)? = null
+    val inHistory: Boolean get() = histPhase == HistoryPhase.ACTIVE
+
     /** Width of one character cell in px at the current font size. */
     val cellWidthPx: Float get() = renderer.fontWidth
 
     private val imm = context.getSystemService(InputMethodManager::class.java)
     private var renderer = TerminalRenderer(spToPx(textSizeSp), TerminalFont.get(context))
-    private var topRow = 0 // <= 0; negative values scroll into the transcript
+    // Local transcript position in px (>= 0 = how far into history); topRow is its nearest whole row (<= 0).
+    private var scrollPx = 0f
+    private var topRow: Int
+        get() = -(scrollPx / cellHeight).roundToInt()
+        set(v) { scrollPx = -v * cellHeight.toFloat() }
+    private val maxScrollPx: Float get() = (viewEmulator?.screen?.activeTranscriptRows ?: 0) * cellHeight.toFloat()
+    /** What is drawn / selected: the history snapshot while in the history view, else the live emulator. */
+    private val viewEmulator: TerminalEmulator? get() = hist ?: session?.emulator
+    private val boost = RefreshRateBoost(this)
 
     // --- IME composing ---------------------------------------------------------------
     internal var composingText: String = ""
@@ -167,46 +190,166 @@ class TerminalCanvasView @JvmOverloads constructor(
         // New output snaps back to the live screen unless the user is reading history.
         val emu = session?.emulator ?: return
         val scrolled = emu.scrollCounter
-        if (topRow < 0) {
-            topRow = max(-emu.screen.activeTranscriptRows, topRow - scrolled)
+        cachePolicy.onOutput(android.os.SystemClock.uptimeMillis())
+        if (scrollPx > 0f && hist == null) {
+            scrollPx = min(maxScrollPx, scrollPx + scrolled * cellHeight)
         }
         emu.clearScrollCounter()
-        if (selActive) shiftSelection(emu, scrolled)
+        unackedRows = 0 // the repaint now reflects what was sent
+        if (selActive && hist == null) shiftSelection(emu, scrolled)
+        if (holdActive && !holdInResize) { holdGotOutput = true; holdLastOutputMs = android.os.SystemClock.uptimeMillis() }
         invalidate()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        updateSize()
+        updateSize(holdOldW = oldw, holdOldH = oldh)
     }
 
-    private fun updateSize() {
+    // --- render hold ---------------------------------------------------------------------
+    // A layout-driven grid resize makes the local emulator reflow immediately, while the remote repaints for the new
+    // size only after SIGWINCH round-trips (tens to ~150 ms). Showing the reflowed in-between state reads as flicker,
+    // so keep presenting the last rendered frame (top-aligned, clipped to the new bounds) until the remote output
+    // after the resize has been quiet for a moment, or a timeout passes.
+    private var holdBitmap: Bitmap? = null
+    private var holdActive = false
+    private var holdInResize = false
+    private var holdStartMs = 0L
+    private var holdLastOutputMs = 0L
+    private var holdGotOutput = false
+    private val holdCheck = object : Runnable {
+        override fun run() {
+            if (!holdActive) return
+            val now = android.os.SystemClock.uptimeMillis()
+            val quiet = holdGotOutput && now - holdLastOutputMs >= HOLD_QUIET_MS
+            if (quiet || now - holdStartMs >= HOLD_TIMEOUT_MS) endHold() else postDelayed(this, 16)
+        }
+    }
+
+    private fun beginHold(oldW: Int, oldH: Int) {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (holdActive) { holdStartMs = now; holdGotOutput = false; return } // keep the original pre-resize frame
+        val emu = session?.emulator ?: return
+        if (oldW <= 0 || oldH <= 0) return
+        var bmp = holdBitmap
+        if (bmp == null || bmp.width != oldW || bmp.height != oldH) {
+            bmp = Bitmap.createBitmap(oldW, oldH, Bitmap.Config.ARGB_8888)
+            holdBitmap = bmp
+        }
+        val c = Canvas(bmp)
+        c.drawColor(Color.TRANSPARENT, android.graphics.PorterDuff.Mode.CLEAR)
+        c.drawColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+            emu.mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND], (255 * backgroundOpacity).roundToInt()))
+        renderer.render(emu, c, topRow, -1, -1, -1, -1)
+        holdActive = true; holdGotOutput = false; holdStartMs = now
+        removeCallbacks(holdCheck); postDelayed(holdCheck, 16)
+    }
+
+    private fun endHold() {
+        holdActive = false
+        removeCallbacks(holdCheck)
+        invalidate()
+    }
+
+    private fun updateSize(holdOldW: Int = 0, holdOldH: Int = 0) {
         val s = session ?: return
         if (width == 0 || height == 0) return
         val cols = max(4, (width / cellWidth).toInt())
         val rows = max(2, height / cellHeight)
         val emu = s.emulator
-        if (cols != emu.mColumns || rows != emu.mRows) clearSelection() // reflow invalidates the coordinates
-        s.resize(cols, rows, cellWidth.roundToInt(), cellHeight)
+        val gridChanged = cols != emu.mColumns || rows != emu.mRows
+        if (gridChanged) {
+            clearSelection() // reflow invalidates the coordinates
+            footerRows = 0
+            cancelHistory()
+            dropHistoryCache() // rebuilt lazily by the next prefetch
+            if (holdOldW > 0 && holdOldH > 0) beginHold(holdOldW, holdOldH)
+        }
+        holdInResize = true
+        try { s.resize(cols, rows, cellWidth.roundToInt(), cellHeight) } finally { holdInResize = false }
     }
 
     override fun onDraw(canvas: Canvas) {
-        val emu = session?.emulator
+        val emu = viewEmulator
         if (emu == null) {
             canvas.drawColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
                 Color.rgb(7, 18, 22), (255 * backgroundOpacity).roundToInt()))
             return
         }
+        val hold = holdBitmap
+        if (holdActive && android.os.SystemClock.uptimeMillis() - holdStartMs > HOLD_TIMEOUT_MS + 100) endHold() // safety net
+        if (holdActive && hold != null && hist == null) {
+            canvas.drawColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+                emu.mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND], (255 * backgroundOpacity).roundToInt()))
+            canvas.drawBitmap(hold, 0f, 0f, null)
+            return
+        }
         canvas.drawColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
             emu.mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND], (255 * backgroundOpacity).roundToInt()))
-        if (selActive) {
-            val (sy, sx, ey, ex) = selectionBounds()
-            renderer.render(emu, canvas, topRow, sy, ey, sx, ex)
-        } else {
-            renderer.render(emu, canvas, topRow, -1, -1, -1, -1)
-        }
-        if (composingText.isNotEmpty() && topRow == 0) drawComposing(canvas, emu)
+        val sel = if (selActive) selectionBounds() else null
+        val sy = sel?.get(0) ?: -1; val sx = sel?.get(1) ?: -1; val ey = sel?.get(2) ?: -1; val ex = sel?.get(3) ?: -1
+        val footer = activeFooter()
+        val save = canvas.save()
+        if (footer > 0) canvas.clipRect(0, 0, width, contentHeightPx(footer)) // scrolling region only
+        drawScrolled(canvas, emu, sy, ey, sx, ex)
+        canvas.restoreToCount(save)
+        if (footer > 0) drawPinnedFooter(canvas, footer)
+        if (composingText.isNotEmpty() && scrollPx == 0f && hist == null) drawComposing(canvas, emu)
         if (selActive && !selDragging) drawHandles(canvas)
+    }
+
+    /** The (pixel-)scrolled content of [emu]; callers clip it. */
+    private fun drawScrolled(canvas: Canvas, emu: TerminalEmulator, sy: Int, ey: Int, sx: Int, ex: Int) {
+        val cell = cellHeight
+        val px = scrollPx.coerceIn(0f, maxScrollPx)
+        val whole = (px / cell).toInt()
+        val frac = px - whole * cell
+        val save = canvas.save()
+        if (frac > 0.5f) {
+            // Pixel-scrolled: draw one extra row above and shift by the sub-row part.
+            canvas.translate(0f, frac - cell)
+            renderer.render(emu, canvas, -whole - 1, emu.mRows + 1, sy, ey, sx, ex)
+        } else {
+            val off = remoteOffsetPx()
+            if (off != 0f) canvas.translate(0f, -off)
+            renderer.render(emu, canvas, -whole, emu.mRows, sy, ey, sx, ex)
+        }
+        canvas.restoreToCount(save)
+    }
+
+    // --- pinned footer ---------------------------------------------------------------------
+    // A TUI's input box + status lines at the bottom would sway with the scrolling content, so while the content is displaced
+    // (history view, fetch offset, wheel-forward offset) those rows are drawn from the LIVE emulator at the bottom and only
+    // the region above is scrolled. Detected once per touch so the split stays fixed during a gesture.
+    private var footerRows = 0
+    private val separatorPaint = Paint().apply { color = Color.parseColor("#4064F4E5") }
+
+    private fun contentHeightPx(footer: Int): Int = ((session?.emulator?.mRows ?: 0) - footer) * cellHeight
+
+    private fun detectFooter() {
+        val live = session?.emulator
+        footerRows = if (live != null && mouseActive && hist == null)
+            FooterDetector.detectRows(FooterDetector.rowsOf(live), live.cursorRow, live.shouldCursorBeVisible(), live.mColumns) else 0
+    }
+
+    /** Footer rows to pin right now, 0 when the content is not displaced. */
+    private fun activeFooter(): Int {
+        val f = footerRows
+        if (f <= 0) return 0
+        val live = session?.emulator ?: return 0
+        if (live.mRows <= f + 1) return 0
+        return if (hist != null || (mouseActive && remoteOffsetPx() != 0f)) f else 0
+    }
+
+    private fun drawPinnedFooter(canvas: Canvas, footer: Int) {
+        val live = session?.emulator ?: return
+        val top = contentHeightPx(footer)
+        val save = canvas.save()
+        canvas.clipRect(0, top, width, height)
+        canvas.translate(0f, top.toFloat())
+        renderer.render(live, canvas, live.mRows - footer, footer, -1, -1, -1, -1)
+        canvas.restoreToCount(save)
+        if (hist != null && scrollPx > 0.5f) canvas.drawRect(0f, top.toFloat(), width.toFloat(), top + resources.displayMetrics.density, separatorPaint)
     }
 
     /** Draws the IME's uncommitted text over the cursor position, wrapping if needed. */
@@ -375,7 +518,336 @@ class TerminalCanvasView @JvmOverloads constructor(
     private var swipeStartY = 0f
     private var swipeFired = false
     private val swipeThresholdPx = 64f * resources.displayMetrics.density
-    private var scrollRemainder = 0f
+    private val wheelAcc = ScrollAccumulator(1f)
+    private var unackedRows = 0      // wheel steps sent since the last repaint (drawn as a temporary offset)
+    private var releaseOffsetPx = 0f // sub-row offset left over at release, eased back to 0
+    private var fling: FlingDecay? = null
+    private var flingLastMs = 0L
+    private var flingX = 0f
+    private var flingY = 0f
+    private val clearUnacked = Runnable { if (unackedRows != 0) { unackedRows = 0; invalidate() } }
+
+    /** Temporary content offset (px, + = content moves up) standing in for wheel steps the host has not repainted yet. */
+    private fun remoteOffsetPx(): Float {
+        val limit = cellHeight * 1.5f
+        val pending = if (histPhase == HistoryPhase.FETCHING) HistoryMath.pendingShift(histPendingPx, cellHeight.toFloat()) else 0f
+        return (unackedRows * cellHeight + wheelAcc.remainder + releaseOffsetPx + pending).coerceIn(-limit, limit)
+    }
+
+    // --- local history view (herdr panes) ----------------------------------------------------
+    // Mouse-tracking pane + scroll toward older lines: fetch the pane's recent output once, replay it into an offscreen
+    // emulator whose bottom matches the live screen, and scroll that locally (pixel-precise, fling, selection).
+    private var histPhase = HistoryPhase.IDLE
+    private var hist: TerminalEmulator? = null
+    private var histPendingPx = 0f   // distance into history gathered while the fetch is in flight
+    private var histGen = 0
+    private var prefetchPauseUntilMs = 0L
+    private var lastScrollX = 0f
+    private var lastScrollY = 0f
+    private var histToken = 0L // output counter when the on-demand fetch started
+    private var histFailUntilMs = 0L
+    private var touching = false
+    private val histTimeout = Runnable { if (histPhase == HistoryPhase.FETCHING) failHistory() }
+
+    // Background prefetch: a fresh snapshot is cached per view (= per visible pane) so entering is instant.
+    private val cachePolicy = HistoryCachePolicy()
+    private var cacheEmu: TerminalEmulator? = null      // exactly aligned build of the snapshot (valid while the policy says fresh)
+    private var cacheSnap: HistorySnapshot? = null      // the snapshot itself, kept when stale for content stitching
+    private var prefetchGen = 0
+    private val prefetchTick = object : Runnable {
+        override fun run() {
+            if (!isAttachedToWindow) return
+            maybePrefetch()
+            postDelayed(this, PREFETCH_TICK_MS)
+        }
+    }
+
+    private fun dropHistoryCache() {
+        prefetchGen++
+        cacheEmu = null
+        cacheSnap = null
+        cachePolicy.invalidate()
+    }
+
+    private fun maybePrefetch() {
+        val fetcher = historyFetcher ?: return
+        val live = session?.emulator ?: return
+        if (!mouseActive || live.isAlternateBufferActive || windowVisibility != VISIBLE || !isShown) return
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now < prefetchPauseUntilMs) return
+        if (!cachePolicy.shouldPrefetch(now, true, histPhase != HistoryPhase.IDLE)) return
+        val gen = prefetchGen
+        val token = cachePolicy.begin(now)
+        fetcher(HistoryMath.FETCH_LINES) { text -> post { onPrefetched(gen, token, text, live) } }
+    }
+
+    private fun onPrefetched(gen: Int, token: Long, text: String?, liveAtStart: TerminalEmulator) {
+        if (gen != prefetchGen) return
+        val live = session?.emulator
+        if (text.isNullOrBlank() || live == null || live !== liveAtStart) { cachePolicy.complete(token, false); return }
+        val cols = live.mColumns; val rows = live.mRows
+        val cw = cellWidth.roundToInt(); val ch = cellHeight
+        // Output since the fetch started: keep the snapshot for stitching but skip the exact-alignment build.
+        val exact = token == cachePolicy.outputSeq
+        val lastRow = if (exact) HistoryMath.lastNonBlankRow({ r -> live.screen.getSelectedText(0, r, cols - 1, r, false).isBlank() }, rows) else -1
+        Thread({
+            val snap = try { HistoryStitch.snapshotOf(text, cols) } catch (e: Exception) { null }
+            val emu = if (exact && snap != null) try { HistoryMath.buildEmulator(text, cols, rows, cw, ch, lastRow) } catch (e: Exception) { null } else null
+            post {
+                val cur = session?.emulator
+                if (gen != prefetchGen || snap == null || cur == null || cur.mColumns != cols || cur.mRows != rows) {
+                    cachePolicy.complete(token, false)
+                } else {
+                    if (!HistoryMath.deepEnough(snap.size - rows, rows)) {
+                        // Shallow snapshot (screen only): history would dead-end; pause prefetching for this pane.
+                        prefetchPauseUntilMs = android.os.SystemClock.uptimeMillis() + HistoryMath.SHALLOW_BACKOFF_MS
+                        cachePolicy.complete(token, false); cacheEmu = null; cacheSnap = null
+                        return@post
+                    }
+                    cacheSnap = snap
+                    if (cachePolicy.complete(token, true) && emu != null) cacheEmu = emu else cacheEmu = null
+                }
+            }
+        }, "history-prefetch").start()
+    }
+
+    /** The cached snapshot if it is still exactly aligned with the live screen and has history to show. */
+    private fun freshCache(): TerminalEmulator? {
+        val emu = cacheEmu ?: return null
+        val live = session?.emulator ?: return null
+        if (!cachePolicy.isFresh || emu.mColumns != live.mColumns || emu.mRows != live.mRows) return null
+        return if (HistoryMath.deepEnough(emu.screen.activeTranscriptRows, emu.mRows)) emu else null
+    }
+
+    private fun beginHistoryFetch(fetcher: (Int, (String?) -> Unit) -> Unit) {
+        histPhase = HistoryPhase.FETCHING
+        histToken = cachePolicy.outputSeq
+        histPendingPx = 0f
+        val gen = ++histGen
+        postDelayed(histTimeout, HistoryMath.FETCH_TIMEOUT_MS)
+        val live = session?.emulator
+        val snap = cacheSnap
+        if (snap != null && live != null && snap.cols == live.mColumns) {
+            // Stale snapshot: stitch it to the current live screen by content (background), else fetch on demand.
+            val cols = live.mColumns; val rows = live.mRows
+            val cw = cellWidth.roundToInt(); val ch = cellHeight
+            val livePlain = HistoryStitch.livePlain(live); val liveAnsi = HistoryStitch.liveAnsi(live)
+            Thread({
+                val emu = try { HistoryStitch.build(snap, livePlain, liveAnsi, cols, rows, cw, ch) } catch (e: Exception) { null }
+                post {
+                    if (gen != histGen || histPhase != HistoryPhase.FETCHING) return@post
+                    if (emu != null) onHistoryBuilt(gen, emu) else fetcher(HistoryMath.FETCH_LINES) { text -> post { onHistoryFetched(gen, text) } }
+                }
+            }, "history-stitch").start()
+            return
+        }
+        fetcher(HistoryMath.FETCH_LINES) { text -> post { onHistoryFetched(gen, text) } }
+    }
+
+    private fun onHistoryFetched(gen: Int, text: String?) {
+        if (gen != histGen || histPhase != HistoryPhase.FETCHING) return
+        val live = session?.emulator
+        if (text == null || text.isBlank() || live == null) { failHistory(); return }
+        val cols = live.mColumns; val rows = live.mRows
+        val cw = cellWidth.roundToInt(); val ch = cellHeight
+        val lastRow = HistoryMath.lastNonBlankRow({ r -> live.screen.getSelectedText(0, r, cols - 1, r, false).isBlank() }, rows)
+        Thread({
+            val emu = try { HistoryMath.buildEmulator(text, cols, rows, cw, ch, lastRow) } catch (e: Exception) { null }
+            post { onHistoryBuilt(gen, emu) }
+        }, "history-build").start()
+    }
+
+    private fun onHistoryBuilt(gen: Int, emu: TerminalEmulator?) {
+        if (gen != histGen || histPhase != HistoryPhase.FETCHING) return
+        removeCallbacks(histTimeout)
+        val live = session?.emulator
+        val max = (emu?.screen?.activeTranscriptRows ?: 0) * cellHeight.toFloat()
+        if (emu == null || live == null || emu.mColumns != live.mColumns || emu.mRows != live.mRows ||
+            !HistoryMath.shouldEnter(histPendingPx, max, cellHeight.toFloat())) {
+            // Nothing to show (no scrollback), or the user already reversed the gesture: keep the live view.
+            if (emu == null || max < cellHeight) histFailUntilMs = android.os.SystemClock.uptimeMillis() + HistoryMath.FAIL_BACKOFF_MS
+            histPhase = HistoryPhase.IDLE; histPendingPx = 0f
+            invalidate()
+            return
+        }
+        if (!HistoryMath.deepEnough(emu.screen.activeTranscriptRows, emu.mRows)) {
+            // The pane holds almost no history here (alt screen / the app scrolls itself): do not dead-end after a few lines,
+            // forward the gesture to the host as before and stay with wheel forwarding for a while.
+            histFailUntilMs = android.os.SystemClock.uptimeMillis() + HistoryMath.SHALLOW_BACKOFF_MS
+            prefetchPauseUntilMs = histFailUntilMs
+            dropHistoryCache()
+            replayPending()
+            return
+        }
+        if (cachePolicy.adopt(histToken)) cacheEmu = emu
+        enterHistory(emu, histPendingPx)
+    }
+
+    private fun enterHistory(emu: TerminalEmulator, startPx: Float) {
+        clearSelection()
+        hist = emu
+        histPhase = HistoryPhase.ACTIVE
+        scrollPx = HistoryMath.initialScroll(startPx, emu.screen.activeTranscriptRows * cellHeight.toFloat())
+        histPendingPx = 0f
+        wheelAcc.reset(); unackedRows = 0; releaseOffsetPx = 0f
+        removeCallbacks(clearUnacked)
+        onHistoryChanged?.invoke(true)
+        postOnAnimation(frameStep)
+        invalidate()
+    }
+
+    private fun failHistory() {
+        histFailUntilMs = android.os.SystemClock.uptimeMillis() + HistoryMath.FAIL_BACKOFF_MS
+        histGen++
+        removeCallbacks(histTimeout)
+        replayPending()
+    }
+
+    /** Ends the fetching phase and sends the distance the user already scrolled as wheel-up steps, so nothing is lost. */
+    private fun replayPending() {
+        val pending = histPendingPx
+        histPhase = HistoryPhase.IDLE; histPendingPx = 0f
+        removeCallbacks(histTimeout)
+        val emu = session?.emulator
+        val rows = HistoryMath.replayRows(pending, cellHeight.toFloat(), MAX_DRAG_ROWS)
+        if (emu != null && rows > 0 && mouseActive) {
+            val (c, r) = cellAt(lastScrollX, lastScrollY)
+            repeat(rows) { emu.sendMouseEvent(TerminalEmulator.MOUSE_WHEELUP_BUTTON, c, r, true) }
+            unackedRows -= rows
+            removeCallbacks(clearUnacked); postDelayed(clearUnacked, UNACKED_TIMEOUT_MS)
+        }
+        invalidate()
+    }
+
+    /** Drops an in-flight fetch or the history view without touching the live state. */
+    private fun cancelHistory() {
+        if (histPhase == HistoryPhase.IDLE) return
+        val wasActive = histPhase == HistoryPhase.ACTIVE
+        histGen++
+        removeCallbacks(histTimeout)
+        if (wasActive) {
+            clearSelection() // selection coordinates belong to the snapshot
+            hist = null
+            scrollPx = 0f
+        }
+        histPhase = HistoryPhase.IDLE; histPendingPx = 0f
+        if (wasActive) onHistoryChanged?.invoke(false)
+        invalidate()
+    }
+
+    /** Leaves the history view for the live screen (public for the floating "latest" button). */
+    fun exitHistory() {
+        stopFling()
+        cancelHistory()
+    }
+
+    private fun maybeExitHistory() {
+        if (histPhase == HistoryPhase.ACTIVE && HistoryMath.shouldExit(scrollPx, fling != null, touching)) exitHistory()
+    }
+
+    /** Applies [dy] px of scroll (+ = toward newer lines) to whichever path is active. Returns false at a local bound. */
+    private fun scrollByPx(dy: Float, x: Float, y: Float, maxRows: Int): Boolean {
+        val emu = session?.emulator ?: return false
+        boost.touch()
+        lastScrollX = x; lastScrollY = y
+        if (histPhase == HistoryPhase.IDLE) {
+            val fetcher = historyFetcher
+            if (fetcher != null && HistoryMath.shouldBegin(dy, mouseActive && !emu.isAlternateBufferActive, true, android.os.SystemClock.uptimeMillis(), histFailUntilMs)) {
+                val cached = freshCache()
+                if (cached != null) {
+                    enterHistory(cached, -dy) // instant: the gesture's distance is applied right away
+                    return true
+                }
+                beginHistoryFetch(fetcher)
+            }
+        }
+        if (histPhase == HistoryPhase.FETCHING) {
+            histPendingPx = HistoryMath.addPending(histPendingPx, dy)
+            invalidate()
+            return true
+        }
+        if (hist == null && (mouseActive || emu.isAlternateBufferActive)) {
+            wheelAcc.rowHeight = cellHeight.toFloat()
+            val rows = wheelAcc.add(dy, maxRows)
+            if (rows != 0) {
+                if (mouseActive) {
+                    val (c, r) = cellAt(x, y)
+                    val button = if (rows > 0) TerminalEmulator.MOUSE_WHEELDOWN_BUTTON else TerminalEmulator.MOUSE_WHEELUP_BUTTON
+                    repeat(abs(rows)) { emu.sendMouseEvent(button, c, r, true) }
+                } else {
+                    val key = if (rows > 0) KeyEvent.KEYCODE_DPAD_DOWN else KeyEvent.KEYCODE_DPAD_UP
+                    repeat(abs(rows)) { sendKey(key) }
+                }
+                unackedRows += rows
+                removeCallbacks(clearUnacked); postDelayed(clearUnacked, UNACKED_TIMEOUT_MS)
+            }
+            invalidate()
+            return true
+        }
+        val max = maxScrollPx
+        val next = (scrollPx - dy).coerceIn(0f, max)
+        val moved = next != scrollPx
+        scrollPx = next
+        if (moved) invalidate()
+        return moved && next > 0f && next < max
+    }
+
+    private fun startFling(f: FlingDecay) {
+        fling = f
+        flingLastMs = android.os.SystemClock.uptimeMillis()
+        postOnAnimation(frameStep)
+    }
+
+    private fun stopFling() {
+        fling = null
+        removeCallbacks(frameStep)
+        releaseOffsetPx = 0f
+    }
+
+    /** Finger lifted without a fling: ease the sub-row leftovers away instead of jumping. */
+    private fun endScrollGesture() {
+        releaseOffsetPx = wheelAcc.remainder
+        wheelAcc.reset()
+        postOnAnimation(frameStep)
+        invalidate()
+        maybeExitHistory()
+    }
+
+    private val frameStep = object : Runnable {
+        override fun run() {
+            if (holdActive) endHold()
+            boost.touch()
+            val now = android.os.SystemClock.uptimeMillis()
+            val dt = (now - flingLastMs).coerceIn(1L, 50L)
+            flingLastMs = now
+            var again = false
+            val f = fling
+            if (f != null) {
+                if (f.finished) {
+                    fling = null
+                    endScrollGesture()
+                    return
+                }
+                val ok = scrollByPx(f.advance(dt), flingX, flingY, MAX_FLING_ROWS)
+                if (!ok) { fling = null; endScrollGesture(); return }
+                again = true
+            } else {
+                // settle: leftover remote offset eases out; a local fractional position eases to the nearest row
+                if (releaseOffsetPx != 0f) {
+                    releaseOffsetPx = if (abs(releaseOffsetPx) < 1f) 0f else releaseOffsetPx * 0.6f
+                    again = true
+                }
+                if (scrollPx > 0f && (hist != null || !(mouseActive || session?.emulator?.isAlternateBufferActive == true))) {
+                    val target = (scrollPx / cellHeight).roundToInt() * cellHeight.toFloat()
+                    val d = target - scrollPx
+                    scrollPx = if (abs(d) < 1f) target else scrollPx + d * 0.4f
+                    if (scrollPx != target) again = true
+                }
+                invalidate()
+            }
+            if (again) postOnAnimation(this) else maybeExitHistory()
+        }
+    }
 
     private fun cellAt(x: Float, y: Float): Pair<Int, Int> {
         val emu = session?.emulator
@@ -389,13 +861,20 @@ class TerminalCanvasView @JvmOverloads constructor(
     private val mouseActive: Boolean get() = session?.emulator?.isMouseTrackingActive == true
 
     private val gestures = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
-        override fun onDown(e: MotionEvent): Boolean = true
+        override fun onDown(e: MotionEvent): Boolean {
+            stopFling()
+            wheelAcc.reset()
+            boost.touch()
+            if (hist == null) detectFooter()
+            return true
+        }
 
         override fun onSingleTapUp(e: MotionEvent): Boolean {
             if (paneMode && !isPaneFocused) {
                 onFocusRequest?.invoke()
                 return true
             }
+            if (hist != null) { exitHistory(); return true } // tap outside a selection leaves the history view
             val emu = session?.emulator ?: return true
             if (mouseActive && topRow == 0) {
                 val (c, r) = cellAt(e.x, e.y)
@@ -409,26 +888,15 @@ class TerminalCanvasView @JvmOverloads constructor(
 
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, dx: Float, dy: Float): Boolean {
             if (scaling || paneSwipeFired) return true
-            val emu = session?.emulator ?: return true
-            scrollRemainder += dy
-            val lines = (scrollRemainder / cellHeight).toInt()
-            if (lines == 0) return true
-            scrollRemainder -= lines * cellHeight
-            when {
-                mouseActive -> {
-                    val (c, r) = cellAt(e2.x, e2.y)
-                    val button = if (lines > 0) TerminalEmulator.MOUSE_WHEELDOWN_BUTTON else TerminalEmulator.MOUSE_WHEELUP_BUTTON
-                    repeat(abs(lines)) { emu.sendMouseEvent(button, c, r, true) }
-                }
-                emu.isAlternateBufferActive -> {
-                    val key = if (lines > 0) KeyEvent.KEYCODE_DPAD_DOWN else KeyEvent.KEYCODE_DPAD_UP
-                    repeat(abs(lines)) { sendKey(key) }
-                }
-                else -> {
-                    topRow = min(0, max(-emu.screen.activeTranscriptRows, topRow + lines))
-                    invalidate()
-                }
-            }
+            scrollByPx(dy, e2.x, e2.y, MAX_DRAG_ROWS)
+            return true
+        }
+
+        override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
+            if (scaling || paneSwipeFired || abs(vy) < abs(vx)) return false
+            if (session?.emulator == null) return false
+            flingX = e2.x; flingY = e2.y
+            startFling(FlingDecay(-vy))
             return true
         }
 
@@ -441,6 +909,8 @@ class TerminalCanvasView @JvmOverloads constructor(
         override fun onLongPress(e: MotionEvent) {
             if (scaling || session == null) return
             if (paneMode && !isPaneFocused) return // the tap-to-focus path handles unfocused panes
+            if (histPhase == HistoryPhase.FETCHING) cancelHistory()
+            topRow = topRow // snap a pixel-scrolled position to a whole row so selection coordinates line up
             beginSelection(e.x, e.y)
         }
     })
@@ -464,6 +934,11 @@ class TerminalCanvasView @JvmOverloads constructor(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> touching = true
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> touching = false
+        }
+        if (holdActive) endHold() // any user interaction (scroll, selection, zoom) shows the live state at once
         if (handleSelectionTouch(event)) return true
         scaleDetector.onTouchEvent(event)
         trackTwoFingerSwipe(event)
@@ -471,7 +946,7 @@ class TerminalCanvasView @JvmOverloads constructor(
         if (!scaleDetector.isInProgress) gestures.onTouchEvent(event)
         if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
             scaling = false
-            scrollRemainder = 0f
+            if (fling == null) endScrollGesture()
         }
         return true
     }
@@ -556,7 +1031,9 @@ class TerminalCanvasView @JvmOverloads constructor(
 
     /** View coords to (0-based col, external row), clamped to the buffer. */
     private fun selCellAt(x: Float, y: Float): Pair<Int, Int> {
-        val emu = session?.emulator ?: return 0 to 0
+        val emu = viewEmulator ?: return 0 to 0
+        val footer = activeFooter()
+        val y = if (footer > 0) y.coerceAtMost(contentHeightPx(footer) - 1f) else y // pinned footer rows are not part of the scrolling content
         val col = (x / cellWidth).toInt().coerceIn(0, emu.mColumns - 1)
         val minRow = -emu.screen.activeTranscriptRows
         val row = (Math.floor((y / cellHeight).toDouble()).toInt() + topRow).coerceIn(minRow, emu.mRows - 1)
@@ -577,7 +1054,7 @@ class TerminalCanvasView @JvmOverloads constructor(
     }
 
     private fun beginSelection(x: Float, y: Float) {
-        val emu = session?.emulator ?: return
+        val emu = viewEmulator ?: return
         val (col, row) = selCellAt(x, y)
         var c1 = col
         var c2 = col
@@ -592,7 +1069,7 @@ class TerminalCanvasView @JvmOverloads constructor(
         selHandle = 0
         paneSwipeActive = false
         scaling = false
-        scrollRemainder = 0f
+        wheelAcc.reset()
         finishActionMode()
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         parent?.requestDisallowInterceptTouchEvent(true)
@@ -676,7 +1153,7 @@ class TerminalCanvasView @JvmOverloads constructor(
         val b = selectionBounds()
         // Normalize storage so start <= end, then move the grabbed end.
         selStartRow = b[0]; selStartCol = b[1]; selEndRow = b[2]; selEndCol = b[3]
-        val cols = session?.emulator?.mColumns ?: return
+        val cols = viewEmulator?.mColumns ?: return
         if (selHandle == 1) {
             selStartCol = (x / cellWidth).roundToInt().coerceIn(0, cols - 1); selStartRow = r
         } else {
@@ -725,7 +1202,7 @@ class TerminalCanvasView @JvmOverloads constructor(
     }
 
     private fun selectedText(): String {
-        val emu = session?.emulator ?: return ""
+        val emu = viewEmulator ?: return ""
         val b = selectionBounds()
         return emu.screen.getSelectedText(b[1], b[0], b[3], b[2], true)
             .lines().joinToString("\n") { it.trimEnd() }
@@ -765,11 +1242,12 @@ class TerminalCanvasView @JvmOverloads constructor(
                     clearSelection()
                 }
                 MENU_PASTE -> {
+                    scrollToBottom()
                     session?.pasteFromClipboard()
                     clearSelection()
                 }
                 MENU_SELECT_ALL -> {
-                    val emu = session?.emulator ?: return true
+                    val emu = viewEmulator ?: return true
                     selStartCol = 0; selStartRow = -emu.screen.activeTranscriptRows
                     selEndCol = emu.mColumns - 1; selEndRow = emu.mRows - 1
                     invalidate()
@@ -797,13 +1275,27 @@ class TerminalCanvasView @JvmOverloads constructor(
         }
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        removeCallbacks(prefetchTick)
+        postDelayed(prefetchTick, PREFETCH_TICK_MS)
+    }
+
     override fun onDetachedFromWindow() {
+        removeCallbacks(prefetchTick)
+        dropHistoryCache()
+        stopFling()
+        cancelHistory()
+        boost.release()
+        holdActive = false
+        removeCallbacks(holdCheck)
         ignoreUntilUp = false
         clearSelection()
         super.onDetachedFromWindow()
     }
 
     fun scrollToBottom() {
+        if (hist != null || histPhase != HistoryPhase.IDLE) { exitHistory(); return } // typing / sending leaves the history view
         if (topRow != 0) {
             topRow = 0
             invalidate()
@@ -811,6 +1303,12 @@ class TerminalCanvasView @JvmOverloads constructor(
     }
 
     companion object {
+        private const val PREFETCH_TICK_MS = 500L
+        private const val MAX_DRAG_ROWS = 8
+        private const val MAX_FLING_ROWS = 4
+        private const val UNACKED_TIMEOUT_MS = 140L
+        private const val HOLD_QUIET_MS = 50L
+        private const val HOLD_TIMEOUT_MS = 250L
         private const val MENU_COPY = 1
         private const val MENU_PASTE = 2
         private const val MENU_SELECT_ALL = 3

@@ -7,6 +7,7 @@ plugins {
 
 android {
     namespace = "com.shibaken.androidterminal"
+    testOptions { unitTests.isReturnDefaultValues = true }
     compileSdk = 35
 
     defaultConfig {

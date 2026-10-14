@@ -609,6 +609,35 @@ class HerdrController(private val alerts: AgentAlertListener) {
         return r["read"]?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull ?: ""
     }
 
+    /**
+     * Recent output of a pane including scrollback, with ANSI colours (falls back to plain text if the server
+     * rejects the ANSI request). Null on any failure. Used by the local history scroller.
+     */
+    suspend fun readPaneHistory(paneId: String, lines: Int): String? {
+        val c = client ?: return null
+        suspend fun read(ansi: Boolean): String? {
+            val r = c.call("pane.read", buildJsonObject {
+                put("pane_id", paneId)
+                put("source", "recent")
+                put("lines", lines)
+                put("format", if (ansi) "ansi" else "text")
+                put("strip_ansi", !ansi)
+            }, 8_000)
+            return r["read"]?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull
+        }
+        return try {
+            try { read(true) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
+                Log.w(TAG, "pane.read ansi failed, retrying as text: ${e.message}")
+                read(false)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "pane.read history failed: ${e.message}")
+            null
+        }
+    }
+
     /** Current visible screen text of a pane (for overview miniatures); null on any failure. */
     suspend fun readPaneVisible(paneId: String): String? {
         val c = client ?: return null
