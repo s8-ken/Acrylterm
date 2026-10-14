@@ -90,6 +90,15 @@ class HerdrController(private val alerts: AgentAlertListener) {
     val workspaceRequired: StateFlow<Boolean> = _workspaceRequired.asStateFlow()
     private val _creationBusy = MutableStateFlow(false)
     val creationBusy: StateFlow<Boolean> = _creationBusy.asStateFlow()
+    private val _pendingTrust = MutableStateFlow<PendingTrust?>(null)
+    /** Set when a worktree create/open needs the user's OK to trust the repository; retried only via [confirmTrust]. */
+    val pendingTrust: StateFlow<PendingTrust?> = _pendingTrust.asStateFlow()
+    private val _pendingGroupClose = MutableStateFlow<String?>(null)
+    /** Workspace id whose close needs its linked worktree workspaces closed too (asks the user first). */
+    val pendingGroupClose: StateFlow<String?> = _pendingGroupClose.asStateFlow()
+    private val _worktreeRemoveFailure = MutableStateFlow<Pair<String, String>?>(null)
+    /** (workspaceId, message) of a non-forced worktree.remove failure; the UI may offer a forced retry. */
+    val worktreeRemoveFailure: StateFlow<Pair<String, String>?> = _worktreeRemoveFailure.asStateFlow()
     private val _bulkClosing = MutableStateFlow(false)
     val bulkClosing: StateFlow<Boolean> = _bulkClosing.asStateFlow()
     private val _bulkCloseResult = MutableStateFlow<BulkCloseResult?>(null)
@@ -408,12 +417,15 @@ class HerdrController(private val alerts: AgentAlertListener) {
         bulkJob?.cancel(); bulkJob = null
         if (_bulkClosing.value) _errors.tryEmit("接続が変更されたため一括終了を中断しました。一部は既に終了している可能性があります。")
         _workspaceRequired.value = false
+        _pendingTrust.value = null
+        _pendingGroupClose.value = null
+        _worktreeRemoveFailure.value = null
         _creationBusy.value = false
         _bulkClosing.value = false
         _bulkCloseResult.value = null
     }
 
-    private fun launchCreation(action: suspend (HerdrRpc) -> TabCreationOutcome) = synchronized(operationLock) {
+    private fun launchCreation(timeoutMs: Long = 10_000, action: suspend (HerdrRpc) -> TabCreationOutcome) = synchronized(operationLock) {
         if (_creationBusy.value || _bulkClosing.value) return@synchronized
         val c = client ?: run { _errors.tryEmit("操作に失敗しました: 接続されていません"); return@synchronized }
         val generation = ++operationGeneration
@@ -421,7 +433,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
         creationJob = scope.launch {
             try {
                 if (client !== c) return@launch
-                val outcome = action(HerdrRpc { method, params -> c.call(method, params) })
+                val outcome = action(HerdrRpc { method, params -> c.call(method, params, timeoutMs) })
                 synchronized(operationLock) {
                     if (generation == operationGeneration && client === c && outcome == TabCreationOutcome.NEEDS_WORKSPACE)
                         _workspaceRequired.value = true
@@ -448,6 +460,123 @@ class HerdrController(private val alerts: AgentAlertListener) {
         }
         launchCreation { rpc -> requestNewTab(workspaceId, noWorkspaces, rpc) }
     }
+
+    /** Creates a tab, then starts [kind] in its root pane without holding the creation flag (agent.start can take ~30s). */
+    fun newAgentTab(kind: String, workspaceId: String? = _state.value.focusedWorkspaceId) {
+        if (_creationBusy.value || _bulkClosing.value) return
+        val c = client ?: run { _errors.tryEmit("操作に失敗しました: 接続されていません"); return }
+        val noWorkspaces = _state.value.workspaces.isEmpty()
+        launchCreation { rpc ->
+            val r = requestNewTabWithPane(workspaceId, noWorkspaces, rpc)
+            // No workspace yet: make one (its root pane hosts the agent) rather than dropping the chosen kind.
+            val pane = if (r.outcome == TabCreationOutcome.NEEDS_WORKSPACE) rootPaneId(createWorkspaceWithInitialTab(null, rpc))
+                else r.rootPaneId
+            if (pane != null) scope.launch {
+                try {
+                    if (client !== c) return@launch
+                    startAgent(kind, pane, { _state.value.panes.flatMapTo(HashSet()) { listOfNotNull(it.agent, it.displayAgent) } },
+                        HerdrRpc { method, params -> c.call(method, params, timeoutMs = 45_000) })
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (client === c) _errors.tryEmit(failureText(e))
+                }
+            }
+            TabCreationOutcome.CREATED
+        }
+    }
+
+    fun renameTab(tabId: String, label: String) = act("tab.rename", buildJsonObject {
+        put("tab_id", tabId)
+        put("label", label.trim())
+    })
+
+    fun renameWorkspace(workspaceId: String, label: String) = act("workspace.rename", buildJsonObject {
+        put("workspace_id", workspaceId)
+        put("label", label.trim())
+    })
+
+    // --- worktrees ----------------------------------------------------------------------
+
+    /** Lists worktrees of [workspaceId]'s repository. Throws [HerdrException]; check [isTrustError] via [needsTrust]. */
+    suspend fun listWorktrees(workspaceId: String, trust: Boolean = false): List<WorktreeEntry> {
+        val c = client ?: throw IOException("接続されていません")
+        return parseWorktrees(c.call("worktree.list", worktreeListParams(workspaceId, trust)))
+    }
+
+    fun needsTrust(e: Exception) = isTrustError(e)
+
+    fun createWorktree(sourceWorkspaceId: String, branch: String, base: String?, trust: Boolean = false) = launchCreation(WORKTREE_TIMEOUT_MS) { rpc ->
+        if (requestWorktreeCreate(sourceWorkspaceId, branch, base, trust, rpc) == WorktreeOutcome.NEEDS_TRUST)
+            _pendingTrust.value = PendingTrust.Create(sourceWorkspaceId, branch, base)
+        TabCreationOutcome.CREATED
+    }
+
+    fun openWorktree(sourceWorkspaceId: String, path: String, trust: Boolean = false) = launchCreation(WORKTREE_TIMEOUT_MS) { rpc ->
+        if (requestWorktreeOpen(sourceWorkspaceId, path, trust, rpc) == WorktreeOutcome.NEEDS_TRUST)
+            _pendingTrust.value = PendingTrust.Open(sourceWorkspaceId, path)
+        TabCreationOutcome.CREATED
+    }
+
+    fun confirmTrust() {
+        val p = _pendingTrust.value ?: return
+        _pendingTrust.value = null
+        when (p) {
+            is PendingTrust.Create -> createWorktree(p.sourceWorkspaceId, p.branch, p.base, trust = true)
+            is PendingTrust.Open -> openWorktree(p.sourceWorkspaceId, p.path, trust = true)
+        }
+    }
+
+    fun dismissTrust() { _pendingTrust.value = null }
+
+    private val removingWorktrees = mutableSetOf<String>()
+
+    fun removeWorktree(workspaceId: String, force: Boolean) {
+        val c = client ?: run { _errors.tryEmit("操作に失敗しました: 接続されていません"); return }
+        _worktreeRemoveFailure.value = null
+        if (!synchronized(removingWorktrees) { removingWorktrees.add(workspaceId) }) return
+        scope.launch {
+            try {
+                if (client !== c) return@launch
+                c.call("worktree.remove", worktreeRemoveParams(workspaceId, force), WORKTREE_TIMEOUT_MS)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (client !== c) return@launch
+                if (force) _errors.tryEmit(failureText(e))
+                else _worktreeRemoveFailure.value = workspaceId to
+                    (e.message?.lineSequence()?.firstOrNull()?.take(120)?.takeIf { it.isNotBlank() } ?: "削除に失敗しました")
+            } finally {
+                synchronized(removingWorktrees) { removingWorktrees.remove(workspaceId) }
+            }
+        }
+    }
+
+    fun dismissWorktreeRemoveFailure() { _worktreeRemoveFailure.value = null }
+
+    /** Closes one workspace; if it has linked worktree workspaces, asks via [pendingGroupClose] before closing them too. */
+    fun closeWorkspace(workspaceId: String, group: Boolean = false) {
+        val c = client ?: run { _errors.tryEmit("操作に失敗しました: 接続されていません"); return }
+        _pendingGroupClose.value = null
+        scope.launch {
+            try {
+                if (client !== c) return@launch
+                val needsGroup = requestWorkspaceClose(workspaceId, group, HerdrRpc { m, p -> c.call(m, p) })
+                if (needsGroup && client === c) _pendingGroupClose.value = workspaceId
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (client === c) _errors.tryEmit(failureText(e))
+            }
+        }
+    }
+
+    fun confirmGroupClose() {
+        val id = _pendingGroupClose.value ?: return
+        closeWorkspace(id, group = true)
+    }
+
+    fun dismissGroupClose() { _pendingGroupClose.value = null }
 
     fun cancelWorkspaceCreation() { _workspaceRequired.value = false }
 
@@ -476,6 +605,10 @@ class HerdrController(private val alerts: AgentAlertListener) {
                 val result = runBulkClose(plan, alreadyClosing,
                     existingIds = { if (plan.kind == BulkCloseKind.TABS) _state.value.tabs.mapTo(HashSet()) { it.tabId }
                         else _state.value.workspaces.mapTo(HashSet()) { it.workspaceId } },
+                    closeGroup = { id ->
+                        if (client !== c) throw CancellationException("connection changed")
+                        c.call("workspace.close", workspaceCloseParams(id, group = true))
+                    },
                     close = { id ->
                         if (client !== c) throw CancellationException("connection changed")
                         c.call(if (plan.kind == BulkCloseKind.TABS) "tab.close" else "workspace.close", buildJsonObject {
@@ -663,6 +796,8 @@ class HerdrController(private val alerts: AgentAlertListener) {
         private const val RESYNC_MAX_MS = 8_000L
         private const val RESYNC_STABLE_MS = 10_000L
         private const val RESYNC_MAX_RAPID = 6
+        /** git worktree add / remove can be slow on large repositories. */
+        private const val WORKTREE_TIMEOUT_MS = 60_000L
 
         private fun sub(type: String) = buildJsonObject { put("type", type) }
 

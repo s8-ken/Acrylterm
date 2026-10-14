@@ -88,15 +88,26 @@ class HerdrUiOperationsTest {
         assertEquals("a", result.failures.single().id)
     }
 
-    @Test fun workspaceGroupRequirementIsReportedWithoutClosingExtraTargets() = runBlocking {
+    @Test fun workspaceGroupRequirementRetriesThatIdWithGroupClose() = runBlocking {
         val called = mutableListOf<String>()
-        val result = runBulkClose(state.bulkClosePlan(BulkCloseKind.WORKSPACES), emptySet(), { setOf("w1", "w2") }) {
+        val grouped = mutableListOf<String>()
+        val result = runBulkClose(state.bulkClosePlan(BulkCloseKind.WORKSPACES), emptySet(), { setOf("w1", "w2") },
+            closeGroup = { grouped += it }) {
             called += it
             if (it == "w1") throw HerdrException("workspace_group_close_required", "group required")
         }
         assertEquals(listOf("w1", "w2"), called)
-        assertEquals(1, result.completed)
-        assertTrue(result.failures.single().reason.contains("グループ"))
+        assertEquals(listOf("w1"), grouped)
+        assertEquals(2, result.completed)
+        assertTrue(result.failures.isEmpty())
+    }
+
+    @Test fun groupRetryIsNotUsedForTabs() = runBlocking {
+        val result = runBulkClose(state.bulkClosePlan(BulkCloseKind.TABS), emptySet(), { setOf("a", "b") },
+            closeGroup = { error("no group for tabs") }) {
+            throw HerdrException("workspace_group_close_required", "x")
+        }
+        assertEquals(2, result.failures.size)
     }
 
     @Test fun disappearedTargetIsConsideredComplete() = runBlocking {

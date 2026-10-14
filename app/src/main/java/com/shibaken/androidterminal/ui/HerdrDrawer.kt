@@ -1,7 +1,9 @@
 package com.shibaken.androidterminal.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -28,6 +31,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,16 +51,31 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shibaken.androidterminal.herdr.AgentStatus
 import com.shibaken.androidterminal.herdr.HerdrController
+import com.shibaken.androidterminal.herdr.HerdrException
 import com.shibaken.androidterminal.herdr.HerdrState
+import com.shibaken.androidterminal.herdr.AGENT_KINDS
 import com.shibaken.androidterminal.herdr.PaneInfo
+import com.shibaken.androidterminal.herdr.PendingTrust
+import com.shibaken.androidterminal.herdr.TabInfo
+import com.shibaken.androidterminal.herdr.WorkspaceInfo
+import com.shibaken.androidterminal.herdr.WorktreeEntry
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.text.input.ImeAction
 
 /** Workspace → tab → pane tree with agent status; tap to focus. [title] is the host / session name. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String, showVersion: Boolean, onNavigated: () -> Unit) {
     var newWorkspace by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf<PaneInfo?>(null) }
     var closing by remember { mutableStateOf<PaneInfo?>(null) }
     var renaming by remember { mutableStateOf<PaneInfo?>(null) }
+    var renamingTab by remember { mutableStateOf<TabInfo?>(null) }
+    var renamingWs by remember { mutableStateOf<WorkspaceInfo?>(null) }
+    var closingWs by remember { mutableStateOf<WorkspaceInfo?>(null) }
+    var removingWs by remember { mutableStateOf<WorkspaceInfo?>(null) }
+    var worktreeWs by remember { mutableStateOf<WorkspaceInfo?>(null) }
+    var newTabMenu by remember { mutableStateOf(false) }
 
     LazyColumn(contentPadding = PaddingValues(vertical = 12.dp)) {
         item {
@@ -79,7 +98,14 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = { newWorkspace = true }) { Icon(Icons.Filled.Add, null); Text(" ワークスペース") }
-                    TextButton(onClick = { herdr.newTab(); onNavigated() }) { Icon(Icons.Filled.Add, null); Text(" タブ") }
+                    // Tap = plain shell tab; the arrow opens the agent menu.
+                    Box {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { herdr.newTab(); onNavigated() }) { Icon(Icons.Filled.Add, null); Text(" タブ") }
+                            IconButton(onClick = { newTabMenu = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.ArrowDropDown, "タブの種類") }
+                        }
+                        NewTabMenu(newTabMenu, { newTabMenu = false }, herdr, state.focusedWorkspaceId, onNavigated)
+                    }
                 }
             }
             HorizontalDivider()
@@ -97,8 +123,25 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
                 ) {
                     StatusDot(ws.agentStatus)
                     Spacer(Modifier.width(10.dp))
-                    Text(ws.title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Column(Modifier.weight(1f)) {
+                        Text(ws.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        ws.worktree?.repoName?.takeIf { it.isNotBlank() }?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
                     Text("${ws.number}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    var wsMenu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { wsMenu = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.MoreVert, "ワークスペースの操作") }
+                        DropdownMenu(wsMenu, { wsMenu = false }) {
+                            DropdownMenuItem(text = { Text("名前を変更") }, onClick = { wsMenu = false; renamingWs = ws })
+                            DropdownMenuItem(text = { Text("ワークツリーを作成") }, onClick = { wsMenu = false; worktreeWs = ws })
+                            if (ws.worktree?.isLinkedWorktree == true) {
+                                DropdownMenuItem(text = { Text("ワークツリーを削除") }, onClick = { wsMenu = false; removingWs = ws })
+                            }
+                            DropdownMenuItem(text = { Text("閉じる") }, onClick = { wsMenu = false; closingWs = ws })
+                        }
+                    }
                 }
             }
             state.tabs.filter { it.workspaceId == ws.workspaceId }.forEach { tab ->
@@ -106,7 +149,7 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .clickable { herdr.focusTab(tab.tabId); onNavigated() }
+                            .combinedClickable(onLongClick = { renamingTab = tab }) { herdr.focusTab(tab.tabId); onNavigated() }
                             .padding(start = 32.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -155,16 +198,28 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
             dismissButton = { TextButton(onClick = { closing = null }) { Text("キャンセル") } },
         )
     }
-    renaming?.let { p ->
-        var label by remember(p) { mutableStateOf(p.label ?: "") }
+    renaming?.let { p -> RenameDialog("ペイン名を変更", p.label ?: "", { herdr.renamePane(p.paneId, it) }, { renaming = null }) }
+    renamingTab?.let { t -> RenameDialog("タブ名を変更", t.label, { herdr.renameTab(t.tabId, it) }, { renamingTab = null }) }
+    renamingWs?.let { w -> RenameDialog("ワークスペース名を変更", w.label, { herdr.renameWorkspace(w.workspaceId, it) }, { renamingWs = null }) }
+    closingWs?.let { w ->
         AlertDialog(
-            onDismissRequest = { renaming = null },
-            title = { Text("ペイン名を変更") },
-            text = { OutlinedTextField(label, { label = it }, singleLine = true) },
-            confirmButton = { TextButton(onClick = { herdr.renamePane(p.paneId, label); renaming = null }) { Text("変更") } },
-            dismissButton = { TextButton(onClick = { renaming = null }) { Text("キャンセル") } },
+            onDismissRequest = { closingWs = null },
+            title = { Text("ワークスペースを閉じる") },
+            text = { Text("「${w.title}」を閉じます。実行中のプロセスは終了します。") },
+            confirmButton = { TextButton(onClick = { herdr.closeWorkspace(w.workspaceId); closingWs = null }) { Text("閉じる") } },
+            dismissButton = { TextButton(onClick = { closingWs = null }) { Text("キャンセル") } },
         )
     }
+    removingWs?.let { w ->
+        AlertDialog(
+            onDismissRequest = { removingWs = null },
+            title = { Text("ワークツリーを削除") },
+            text = { Text("「${w.title}」のワークツリーを削除します。") },
+            confirmButton = { TextButton(onClick = { herdr.removeWorktree(w.workspaceId, force = false); removingWs = null }) { Text("削除") } },
+            dismissButton = { TextButton(onClick = { removingWs = null }) { Text("キャンセル") } },
+        )
+    }
+    worktreeWs?.let { w -> WorktreeDialog(w.workspaceId, w.title, herdr, onDismiss = { worktreeWs = null }, onNavigated = onNavigated) }
     preview?.let { p -> PanePreviewDialog(p, herdr, onDismiss = { preview = null }, onFocus = { herdr.focusPane(p.paneId); preview = null; onNavigated() }) }
 }
 
@@ -273,4 +328,126 @@ private fun PanePreviewDialog(pane: PaneInfo, herdr: HerdrController, onDismiss:
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
     )
+}
+
+/** One small rename dialog shared by pane / tab / workspace. */
+@Composable
+internal fun RenameDialog(title: String, initial: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+    var label by remember(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { OutlinedTextField(label, { label = it }, singleLine = true) },
+        confirmButton = { TextButton(onClick = { onConfirm(label); onDismiss() }, enabled = label.isNotBlank()) { Text("変更") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("キャンセル") } },
+    )
+}
+
+/** Shell + agent entries for creating a tab. */
+@Composable
+internal fun NewTabMenu(expanded: Boolean, onDismiss: () -> Unit, herdr: HerdrController, workspaceId: String?, onNavigated: () -> Unit = {}) {
+    DropdownMenu(expanded, onDismiss) {
+        DropdownMenuItem(text = { Text("シェル") }, onClick = { onDismiss(); herdr.newTab(workspaceId); onNavigated() })
+        AGENT_KINDS.forEach { (kind, name) ->
+            DropdownMenuItem(text = { Text(name) }, onClick = { onDismiss(); herdr.newAgentTab(kind, workspaceId); onNavigated() })
+        }
+    }
+}
+
+/** Create a worktree from [workspaceId]'s repository, or open / focus an existing one. */
+@Composable
+internal fun WorktreeDialog(workspaceId: String, workspaceTitle: String, herdr: HerdrController, onDismiss: () -> Unit, onNavigated: () -> Unit) {
+    var branch by remember { mutableStateOf("") }
+    var base by remember { mutableStateOf("") }
+    var list by remember { mutableStateOf<List<WorktreeEntry>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var askTrust by remember { mutableStateOf(false) }
+    var reload by remember { mutableStateOf(0 to false) }
+    LaunchedEffect(workspaceId, reload) {
+        list = null; error = null
+        try {
+            list = herdr.listWorktrees(workspaceId, trust = reload.second)
+        } catch (e: Exception) {
+            error = when {
+                herdr.needsTrust(e) -> { askTrust = true; null }
+                e is HerdrException && e.code == "not_git_worktree" -> "Git リポジトリの外です"
+                else -> e.message?.lineSequence()?.firstOrNull()?.take(80) ?: "読み込めませんでした"
+            }
+        }
+    }
+    if (askTrust) {
+        AlertDialog(
+            onDismissRequest = { askTrust = false; onDismiss() },
+            title = { Text("このリポジトリを信頼して続行しますか？") },
+            confirmButton = { TextButton(onClick = { askTrust = false; reload = reload.first + 1 to true }) { Text("信頼して続行") } },
+            dismissButton = { TextButton(onClick = { askTrust = false; onDismiss() }) { Text("キャンセル") } },
+        )
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("ワークツリー · $workspaceTitle", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(branch, { branch = it }, label = { Text("ブランチ名") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(base, { base = it }, label = { Text("元にするブランチ(任意)") }, singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Done), modifier = Modifier.fillMaxWidth())
+                TextButton(onClick = { herdr.createWorktree(workspaceId, branch, base.ifBlank { null }); onDismiss(); onNavigated() },
+                    enabled = branch.isNotBlank() && list != null, modifier = Modifier.heightIn(min = 48.dp)) { Text("作成") }
+                HorizontalDivider()
+                Column(Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState())) {
+                    val items = list
+                    when {
+                        error != null -> Text(error.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        items == null -> if (!askTrust) CircularProgressIndicator(Modifier.size(24.dp))
+                        else -> items.filter { !it.isBare }.forEach { w ->
+                            Column(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable {
+                                if (w.openWorkspaceId != null) herdr.focusWorkspace(w.openWorkspaceId)
+                                else herdr.openWorktree(workspaceId, w.path)
+                                onDismiss(); onNavigated()
+                            }.padding(vertical = 6.dp), verticalArrangement = Arrangement.Center) {
+                                Text(w.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    fontWeight = if (w.openWorkspaceId != null) FontWeight.SemiBold else FontWeight.Normal)
+                                Text(w.dirName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
+    )
+}
+
+/** Confirmations driven by controller state (trust, group close, forced worktree removal). Mount once per screen. */
+@Composable
+fun HerdrPendingDialogs(herdr: HerdrController, state: HerdrState) {
+    val trust by herdr.pendingTrust.collectAsState()
+    val groupClose by herdr.pendingGroupClose.collectAsState()
+    val removeFailure by herdr.worktreeRemoveFailure.collectAsState()
+    if (trust != null) {
+        AlertDialog(
+            onDismissRequest = { herdr.dismissTrust() },
+            title = { Text("このリポジトリを信頼して続行しますか？") },
+            confirmButton = { TextButton(onClick = { herdr.confirmTrust() }) { Text("信頼して続行") } },
+            dismissButton = { TextButton(onClick = { herdr.dismissTrust() }) { Text("キャンセル") } },
+        )
+    }
+    if (groupClose != null) {
+        AlertDialog(
+            onDismissRequest = { herdr.dismissGroupClose() },
+            title = { Text("紐づくワークツリーのワークスペースもまとめて閉じますか？") },
+            confirmButton = { TextButton(onClick = { herdr.confirmGroupClose() }) { Text("まとめて閉じる") } },
+            dismissButton = { TextButton(onClick = { herdr.dismissGroupClose() }) { Text("キャンセル") } },
+        )
+    }
+    removeFailure?.let { (id, message) ->
+        AlertDialog(
+            onDismissRequest = { herdr.dismissWorktreeRemoveFailure() },
+            title = { Text("ワークツリーを削除できませんでした") },
+            text = { Text("${state.workspace(id)?.title.orEmpty()}\n$message\n\n強制削除すると未コミットの変更は失われます。") },
+            confirmButton = { TextButton(onClick = { herdr.removeWorktree(id, force = true) }) { Text("強制削除", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { herdr.dismissWorktreeRemoveFailure() }) { Text("キャンセル") } },
+        )
+    }
 }

@@ -59,6 +59,7 @@ fun PaneOverview(state: HerdrState, herdr: HerdrController, onDismiss: () -> Uni
     val busy = bulkClosing || creationBusy
     var overviewMenu by remember { mutableStateOf(false) }
     var newWorkspace by remember { mutableStateOf(false) }
+    var worktreeFor by remember { mutableStateOf<String?>(null) }
     var closePlan by remember { mutableStateOf<BulkClosePlan?>(null) }
     var workspace by remember { mutableStateOf<String?>(null) }
     var expandedId by remember { mutableStateOf<String?>(null) }
@@ -102,6 +103,13 @@ fun PaneOverview(state: HerdrState, herdr: HerdrController, onDismiss: () -> Uni
                     IconButton(onClick = { overviewMenu = true }, enabled = !busy, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.MoreVert, "タブ一覧メニュー") }
                     DropdownMenu(overviewMenu, { overviewMenu = false }) {
                         DropdownMenuItem(text = { Text("新しいワークスペース") }, onClick = { overviewMenu = false; newWorkspace = true })
+                        DropdownMenuItem(text = { Text("新しいワークツリー") }, enabled = (workspace ?: state.focusedWorkspaceId) != null,
+                            onClick = { overviewMenu = false; worktreeFor = workspace ?: state.focusedWorkspaceId })
+                        AGENT_KINDS.forEach { (kind, name) ->
+                            DropdownMenuItem(text = { Text("$name を新しいタブで") }, onClick = {
+                                overviewMenu = false; herdr.newAgentTab(kind, workspace ?: state.focusedWorkspaceId); onDismiss()
+                            })
+                        }
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text("すべてのタブを閉じる") },
                             enabled = rawState.tabs.isNotEmpty(), onClick = { overviewMenu = false; closePlan = rawState.bulkClosePlan(BulkCloseKind.TABS) })
@@ -157,6 +165,9 @@ fun PaneOverview(state: HerdrState, herdr: HerdrController, onDismiss: () -> Uni
     }
     if (newWorkspace) WorkspaceCreationDialog(onCreate = { label -> herdr.newWorkspace(label); newWorkspace = false; onDismiss() },
         onDismiss = { newWorkspace = false })
+    worktreeFor?.let { id ->
+        WorktreeDialog(id, state.workspace(id)?.title.orEmpty(), herdr, onDismiss = { worktreeFor = null }, onNavigated = onDismiss)
+    }
     closePlan?.let { plan ->
         val closingTabs = plan.kind == BulkCloseKind.TABS
         AlertDialog(onDismissRequest = { closePlan = null },

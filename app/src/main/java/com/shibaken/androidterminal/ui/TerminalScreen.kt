@@ -649,6 +649,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
         }
     }
 
+    if (herdr != null) HerdrPendingDialogs(herdr, rawHerdrState)
     if (workspaceRequired && herdr != null) {
         WorkspaceCreationDialog(missingActiveWorkspace = true, onCreate = { herdr.createWorkspaceForNewTab(it) },
             onDismiss = { herdr.cancelWorkspaceCreation() })

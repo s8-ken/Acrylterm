@@ -22,6 +22,15 @@ object AgentStatus {
 }
 
 @Serializable
+data class WorkspaceWorktree(
+    @SerialName("repo_key") val repoKey: String = "",
+    @SerialName("repo_name") val repoName: String = "",
+    @SerialName("repo_root") val repoRoot: String = "",
+    @SerialName("checkout_path") val checkoutPath: String = "",
+    @SerialName("is_linked_worktree") val isLinkedWorktree: Boolean = false,
+)
+
+@Serializable
 data class WorkspaceInfo(
     @SerialName("workspace_id") val workspaceId: String,
     val number: Int = 0,
@@ -31,6 +40,7 @@ data class WorkspaceInfo(
     @SerialName("tab_count") val tabCount: Int = 0,
     @SerialName("active_tab_id") val activeTabId: String? = null,
     @SerialName("agent_status") val agentStatus: String = AgentStatus.UNKNOWN,
+    val worktree: WorkspaceWorktree? = null,
 ) {
     val title: String get() = label.ifBlank { "Workspace $number" }
 }

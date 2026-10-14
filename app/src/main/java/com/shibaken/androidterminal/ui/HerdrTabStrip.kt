@@ -2,7 +2,8 @@ package com.shibaken.androidterminal.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -12,6 +13,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import com.shibaken.androidterminal.herdr.TabInfo
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Alignment
@@ -29,10 +37,13 @@ import com.shibaken.androidterminal.herdr.HerdrController
 import com.shibaken.androidterminal.herdr.HerdrState
 
 /** B2: one quiet 56dp row. Title dragging only scrolls; it never changes the active tab. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HerdrTabStrip(state: HerdrState, herdr: HerdrController, onOpenOverview: () -> Unit, menu: @Composable () -> Unit) {
     val tabs = state.tabs.filter { it.workspaceId == state.focusedWorkspaceId }
     val listState = rememberLazyListState()
+    var renaming by remember { mutableStateOf<TabInfo?>(null) }
+    var newTabMenu by remember { mutableStateOf(false) }
     LaunchedEffect(state.focusedTabId, tabs.map { it.tabId }) {
         val index = tabs.indexOfFirst { it.tabId == state.focusedTabId }
         if (index >= 0) listState.animateScrollToItem(index)
@@ -50,7 +61,8 @@ fun HerdrTabStrip(state: HerdrState, herdr: HerdrController, onOpenOverview: () 
                     if (focused) drawLine(CyanVeil.Cyan, Offset(12.dp.toPx(), size.height - 2.dp.toPx()),
                         Offset((size.width - 12.dp.toPx()).coerceAtLeast(12.dp.toPx()), size.height - 2.dp.toPx()), strokeWidth = 2.dp.toPx())
                 }) {
-                    Row(Modifier.height(48.dp).clickable { herdr.focusTab(tab.tabId) }.semantics {
+                    Row(Modifier.height(48.dp).combinedClickable(onLongClick = { renaming = tab }) { herdr.focusTab(tab.tabId) }.semantics {
+                        customActions = listOf(CustomAccessibilityAction("名前を変更") { renaming = tab; true })
                         selected = focused
                         contentDescription = tab.title + if (blocked) "、入力待ち" else ""
                     }.padding(start = 12.dp, end = if (focused) 0.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -64,7 +76,14 @@ fun HerdrTabStrip(state: HerdrState, herdr: HerdrController, onOpenOverview: () 
                 }
             }
         }
-        IconButton(onClick = { herdr.newTab() }, modifier = Modifier.size(48.dp)) { VeilIcon(R.drawable.veil_plus, "新しいタブ") }
+        // Tap = shell tab, long-press = shell / agent menu.
+        Box(Modifier.size(48.dp).combinedClickable(onLongClick = { newTabMenu = true }) { herdr.newTab() }.semantics {
+            contentDescription = "新しいタブ"
+            customActions = listOf(CustomAccessibilityAction("タブの種類を選ぶ") { newTabMenu = true; true })
+        }, contentAlignment = Alignment.Center) {
+            VeilIcon(R.drawable.veil_plus, null)
+            NewTabMenu(newTabMenu, { newTabMenu = false }, herdr, state.focusedWorkspaceId)
+        }
         IconButton(onClick = onOpenOverview, modifier = Modifier.size(48.dp).semantics { contentDescription = "タブ一覧、${state.tabs.size}個のタブ" }) {
             Box(Modifier.size(24.dp, 26.dp).border(1.7.dp, CyanVeil.Text, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
                 Text(state.tabs.size.toString(), color = CyanVeil.Text, fontSize = 14.sp)
@@ -73,4 +92,5 @@ fun HerdrTabStrip(state: HerdrState, herdr: HerdrController, onOpenOverview: () 
         menu()
     }
     }
+    renaming?.let { t -> RenameDialog("タブ名を変更", t.label, { herdr.renameTab(t.tabId, it) }, { renaming = null }) }
 }

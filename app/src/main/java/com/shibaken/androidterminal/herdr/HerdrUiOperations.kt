@@ -24,15 +24,7 @@ internal enum class TabCreationOutcome { CREATED, NEEDS_WORKSPACE }
 
 internal suspend fun requestNewTab(workspaceId: String?, noKnownWorkspaces: Boolean, rpc: HerdrRpc): TabCreationOutcome {
     if (workspaceId == null && noKnownWorkspaces) return TabCreationOutcome.NEEDS_WORKSPACE
-    return try {
-        rpc.call("tab.create", buildJsonObject {
-            workspaceId?.let { put("workspace_id", it) }
-            put("focus", true)
-        })
-        TabCreationOutcome.CREATED
-    } catch (error: Exception) {
-        if (isNoActiveWorkspaceError(error)) TabCreationOutcome.NEEDS_WORKSPACE else throw error
-    }
+    return requestNewTabWithPane(workspaceId, noKnownWorkspaces, rpc).outcome
 }
 
 /** workspace.create already creates and focuses its initial tab and root pane on supported servers. */
@@ -52,8 +44,9 @@ fun HerdrState.bulkClosePlan(kind: BulkCloseKind) = BulkClosePlan(kind,
     (if (kind == BulkCloseKind.TABS) tabs.map { it.tabId } else workspaces.map { it.workspaceId }).distinct(),
     workspaces.size, tabs.size, panes.size)
 
+/** [closeGroup] re-closes a workspace together with its linked worktree workspaces (bulk close targets all of them anyway). */
 internal suspend fun runBulkClose(plan: BulkClosePlan, alreadyClosingTabs: Set<String>, existingIds: () -> Set<String>,
-    close: suspend (String) -> Unit): BulkCloseResult {
+    closeGroup: (suspend (String) -> Unit)? = null, close: suspend (String) -> Unit): BulkCloseResult {
     var completed = 0
     val failures = mutableListOf<BulkCloseFailure>()
     for (id in plan.ids.distinct()) {
@@ -63,7 +56,11 @@ internal suspend fun runBulkClose(plan: BulkClosePlan, alreadyClosingTabs: Set<S
             continue
         }
         try {
-            close(id)
+            try {
+                close(id)
+            } catch (error: Exception) {
+                if (plan.kind == BulkCloseKind.WORKSPACES && closeGroup != null && isGroupCloseRequired(error)) closeGroup(id) else throw error
+            }
             completed++
         } catch (error: TimeoutCancellationException) {
             currentCoroutineContext().ensureActive()
