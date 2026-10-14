@@ -5,6 +5,9 @@ import com.shibaken.androidterminal.data.AppJson
 import com.shibaken.androidterminal.ssh.RemoteCommand
 import com.shibaken.androidterminal.ssh.SshConnection
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -75,6 +78,20 @@ class HerdrController(private val alerts: AgentAlertListener) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
     private val _state = MutableStateFlow(HerdrState())
     val state: StateFlow<HerdrState> = _state.asStateFlow()
+    private val deferredCloses = DeferredTabClosures(scope)
+    val pendingTabCloses = deferredCloses.pending
+    private val operationLock = Any()
+    private var operationGeneration = 0L
+    private var creationJob: Job? = null
+    private var bulkJob: Job? = null
+    private val _workspaceRequired = MutableStateFlow(false)
+    val workspaceRequired: StateFlow<Boolean> = _workspaceRequired.asStateFlow()
+    private val _creationBusy = MutableStateFlow(false)
+    val creationBusy: StateFlow<Boolean> = _creationBusy.asStateFlow()
+    private val _bulkClosing = MutableStateFlow(false)
+    val bulkClosing: StateFlow<Boolean> = _bulkClosing.asStateFlow()
+    private val _bulkCloseResult = MutableStateFlow<BulkCloseResult?>(null)
+    val bulkCloseResult: StateFlow<BulkCloseResult?> = _bulkCloseResult.asStateFlow()
 
     // Action failures (not connection-phase errors) for a snackbar; `message` is still set too.
     private val _errors = MutableSharedFlow<String>(extraBufferCapacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -87,11 +104,16 @@ class HerdrController(private val alerts: AgentAlertListener) {
     @Volatile private var client: HerdrClient? = null
 
     fun attach(conn: SshConnection, herdrSession: String) {
+        cancelInteractiveOperations()
+        deferredCloses.cancelAll()
         loopJob?.cancel()
+        client = null
         loopJob = scope.launch { runLoop(conn, herdrSession) }
     }
 
     fun detach() {
+        cancelInteractiveOperations()
+        deferredCloses.cancelAll()
         loopJob?.cancel()
         loopJob = null
         client = null
@@ -99,6 +121,8 @@ class HerdrController(private val alerts: AgentAlertListener) {
     }
 
     fun dispose() {
+        cancelInteractiveOperations()
+        deferredCloses.cancelAll()
         scope.cancel()
     }
 
@@ -135,6 +159,8 @@ class HerdrController(private val alerts: AgentAlertListener) {
                 throw e
             } catch (e: Exception) {
                 client = null
+                cancelInteractiveOperations()
+                deferredCloses.cancelAll()
                 val msg = when {
                     e is HerdrException && e.code == "unreachable" -> "サーバーが起動していません(起動を待っています)"
                     else -> e.message ?: e.toString()
@@ -239,6 +265,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
                 focusedPaneId = snap.resolvedFocusedPaneId,
             )
         }
+        deferredCloses.reconcile(snap.tabs.mapTo(HashSet()) { it.tabId })
     }
 
     private fun onAgentEvent(ev: JsonObject) {
@@ -287,8 +314,9 @@ class HerdrController(private val alerts: AgentAlertListener) {
     /** Moves to the previous/next tab of the focused workspace (clamped, no wrap). */
     fun focusTabRelative(delta: Int) {
         val s = _state.value
-        val tabs = s.tabs.filter { it.workspaceId == s.focusedWorkspaceId }
-        val i = tabs.indexOfFirst { it.tabId == s.focusedTabId }
+        val visible = s.withPendingTabsHidden(pendingTabCloses.value)
+        val tabs = visible.tabs.filter { it.workspaceId == visible.focusedWorkspaceId }
+        val i = tabs.indexOfFirst { it.tabId == visible.focusedTabId }
         if (i < 0) return
         val j = (i + delta).coerceIn(0, tabs.lastIndex)
         if (j != i) focusTab(tabs[j].tabId)
@@ -316,6 +344,44 @@ class HerdrController(private val alerts: AgentAlertListener) {
 
     fun closeTab(tabId: String) = act("tab.close", buildJsonObject { put("tab_id", tabId) })
 
+    fun closeTabWithUndo(tabId: String) {
+        if (_bulkClosing.value) return
+        val visible = _state.value.withPendingTabsHidden(pendingTabCloses.value)
+        val tab = visible.tabs.firstOrNull { it.tabId == tabId } ?: return
+        val peers = visible.tabs.filter { it.workspaceId == tab.workspaceId }
+        val i = peers.indexOf(tab)
+        val next = peers.getOrNull(i + 1) ?: peers.getOrNull(i - 1)
+            ?: visible.tabs.firstOrNull { it.tabId != tabId }
+        val capturedClient = client
+        val close = PendingTabClose(tabId, tab.title, visible.focusedTabId == tabId, next?.tabId)
+        if (!deferredCloses.request(close) {
+            if (capturedClient == null || client !== capturedClient) {
+                _errors.tryEmit("タブを閉じられませんでした: 接続されていません")
+                false
+            } else try {
+                capturedClient.call("tab.close", buildJsonObject { put("tab_id", tabId) })
+                true
+            } catch (e: TimeoutCancellationException) {
+                currentCoroutineContext().ensureActive()
+                _errors.tryEmit("タブを閉じられませんでした: 応答がタイムアウトしました")
+                false
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _errors.tryEmit(failureText(e))
+                false
+            }
+        }) return
+        if (close.restoreFocus && next != null && capturedClient != null) focusTab(next.tabId)
+    }
+
+    fun undoCloseTab(tabId: String) {
+        val close = deferredCloses.undo(tabId) ?: return
+        // Preserve a deliberate navigation elsewhere while the Undo snackbar was visible.
+        if (close.restoreFocus && _state.value.focusedTabId in listOf(tabId, close.replacementId) && client != null) focusTab(tabId)
+    }
+
+
     /** Commits a divider drag. [path]: false = first child, true = second child, from the root split. */
     fun setSplitRatio(tabId: String, path: List<Boolean>, ratio: Float) = act("layout.set_split_ratio", buildJsonObject {
         put("tab_id", tabId)
@@ -323,15 +389,99 @@ class HerdrController(private val alerts: AgentAlertListener) {
         put("ratio", ratio)
     })
 
-    fun newTab(workspaceId: String? = _state.value.focusedWorkspaceId) = act("tab.create", buildJsonObject {
-        workspaceId?.let { put("workspace_id", it) }
-        put("focus", true)
-    })
+    private fun cancelInteractiveOperations() = synchronized(operationLock) {
+        operationGeneration++
+        creationJob?.cancel(); creationJob = null
+        bulkJob?.cancel(); bulkJob = null
+        if (_bulkClosing.value) _errors.tryEmit("接続が変更されたため一括終了を中断しました。一部は既に終了している可能性があります。")
+        _workspaceRequired.value = false
+        _creationBusy.value = false
+        _bulkClosing.value = false
+        _bulkCloseResult.value = null
+    }
 
-    fun newWorkspace(label: String?) = act("workspace.create", buildJsonObject {
-        put("focus", true)
-        if (!label.isNullOrBlank()) put("label", label)
-    })
+    private fun launchCreation(action: suspend (HerdrRpc) -> TabCreationOutcome) = synchronized(operationLock) {
+        if (_creationBusy.value || _bulkClosing.value) return@synchronized
+        val c = client ?: run { _errors.tryEmit("操作に失敗しました: 接続されていません"); return@synchronized }
+        val generation = ++operationGeneration
+        _creationBusy.value = true
+        creationJob = scope.launch {
+            try {
+                if (client !== c) return@launch
+                val outcome = action(HerdrRpc { method, params -> c.call(method, params) })
+                synchronized(operationLock) {
+                    if (generation == operationGeneration && client === c && outcome == TabCreationOutcome.NEEDS_WORKSPACE)
+                        _workspaceRequired.value = true
+                }
+            } catch (error: TimeoutCancellationException) {
+                currentCoroutineContext().ensureActive()
+                if (client === c) _errors.tryEmit("操作に失敗しました: 応答がタイムアウトしました")
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (client === c) _errors.tryEmit(failureText(error))
+            } finally {
+                synchronized(operationLock) { if (generation == operationGeneration) _creationBusy.value = false }
+            }
+        }
+    }
+
+    fun newTab(workspaceId: String? = _state.value.focusedWorkspaceId) {
+        if (_creationBusy.value || _bulkClosing.value) return
+        val noWorkspaces = _state.value.workspaces.isEmpty()
+        if (workspaceId == null && noWorkspaces) {
+            _workspaceRequired.value = true
+            return
+        }
+        launchCreation { rpc -> requestNewTab(workspaceId, noWorkspaces, rpc) }
+    }
+
+    fun cancelWorkspaceCreation() { _workspaceRequired.value = false }
+
+    fun createWorkspaceForNewTab(label: String?) {
+        if (!_workspaceRequired.value) return
+        _workspaceRequired.value = false
+        newWorkspace(label)
+    }
+
+    fun newWorkspace(label: String?) = launchCreation { rpc -> createWorkspaceWithInitialTab(label, rpc); TabCreationOutcome.CREATED }
+
+    fun dismissBulkCloseResult() { _bulkCloseResult.value = null }
+
+    fun closeAllConfirmed(plan: BulkClosePlan) = synchronized(operationLock) {
+        if (_bulkClosing.value || _creationBusy.value || plan.ids.isEmpty()) return@synchronized
+        val c = client ?: run { _errors.tryEmit("一括終了に失敗しました: 接続されていません"); return@synchronized }
+        val generation = ++operationGeneration
+        _bulkClosing.value = true
+        _bulkCloseResult.value = null
+        bulkJob = scope.launch {
+            try {
+                val affectedTabs = if (plan.kind == BulkCloseKind.TABS) plan.ids.toSet()
+                    else _state.value.tabs.filter { it.workspaceId in plan.ids }.mapTo(HashSet()) { it.tabId }
+                val alreadyClosing = deferredCloses.prepareForBulk(affectedTabs)
+                if (client !== c) return@launch
+                val result = runBulkClose(plan, alreadyClosing,
+                    existingIds = { if (plan.kind == BulkCloseKind.TABS) _state.value.tabs.mapTo(HashSet()) { it.tabId }
+                        else _state.value.workspaces.mapTo(HashSet()) { it.workspaceId } },
+                    close = { id ->
+                        if (client !== c) throw CancellationException("connection changed")
+                        c.call(if (plan.kind == BulkCloseKind.TABS) "tab.close" else "workspace.close", buildJsonObject {
+                            put(if (plan.kind == BulkCloseKind.TABS) "tab_id" else "workspace_id", id)
+                        })
+                    })
+                if (client === c) {
+                    // Refresh even when some items failed, so the list reflects partial completion.
+                    try { applySnapshot(c.call("session.snapshot")) }
+                    catch (_: TimeoutCancellationException) { currentCoroutineContext().ensureActive() }
+                    catch (error: CancellationException) { throw error }
+                    catch (_: Exception) { /* The subscription loop will refresh after transport recovery. */ }
+                    if (client === c) _bulkCloseResult.value = result
+                }
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) { if (client === c) _errors.tryEmit(failureText(error)) }
+            finally { synchronized(operationLock) { if (generation == operationGeneration) _bulkClosing.value = false } }
+        }
+    }
 
     fun renamePane(paneId: String, label: String) = act("pane.rename", buildJsonObject {
         put("pane_id", paneId)

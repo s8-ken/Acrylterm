@@ -89,7 +89,7 @@ class SessionManager(private val app: App) {
         }
         val pi = PendingIntent.getActivity(app, key, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val n = NotificationCompat.Builder(app, App.CHANNEL_AGENT)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(pi)

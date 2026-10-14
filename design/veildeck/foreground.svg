@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108"><defs>
+  <radialGradient id="ambient" cx="0.16" cy="0.92" r="0.94">
+    <stop offset="0" stop-color="#20555B"/><stop offset="0.55" stop-color="#102B32"/><stop offset="1" stop-color="#071216"/>
+  </radialGradient>
+  <linearGradient id="rear" x1="34" y1="29" x2="79" y2="66" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#266168"/><stop offset="1" stop-color="#103037"/>
+  </linearGradient>
+  <linearGradient id="front" x1="27" y1="40" x2="75" y2="75" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#1D454C"/><stop offset="0.5" stop-color="#102A31"/><stop offset="1" stop-color="#0A1D23"/>
+  </linearGradient>
+  <linearGradient id="rim" x1="28" y1="40" x2="73" y2="75" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#64F4E5"/><stop offset="0.52" stop-color="#3C8B8C"/><stop offset="1" stop-color="#24464D"/>
+  </linearGradient>
+</defs><g id="deck">
+  <rect id="rear-pane" x="34" y="29" width="46" height="36" rx="8" fill="url(#rear)" stroke="#64F4E5" stroke-opacity="0.38" stroke-width="1.2"/>
+  <path id="rear-light" d="M43 29H72C76.418 29 80 32.582 80 37V41" fill="none" stroke="#9CF6C9" stroke-opacity="0.65" stroke-width="1.3" stroke-linecap="round"/>
+  <rect id="depth-shadow" x="27" y="42" width="48" height="35" rx="8" fill="#020B0E" fill-opacity="0.45"/>
+  <rect id="front-pane" x="27" y="40" width="48" height="35" rx="8" fill="url(#front)" stroke="url(#rim)" stroke-width="1.5"/>
+  <path id="prompt" d="M38 50.5L45.5 57L38 63.5" fill="none" stroke="#64F4E5" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="cursor" d="M53.5 63.5H63" fill="none" stroke="#9CF6C9" stroke-width="3.4" stroke-linecap="round"/>
+</g></svg>

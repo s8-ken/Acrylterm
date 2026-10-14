@@ -20,6 +20,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "androidTerminal"
+rootProject.name = "Veildeck"
 include(":app")
 include(":terminal-emulator")

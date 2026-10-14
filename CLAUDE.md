@@ -1,4 +1,4 @@
-# androidTerminal 開発メモ(エージェント向け)
+# Veildeck 開発メモ(エージェント向け)
 
 ## 隔離方針
 - 既定は **main + ブランチ**。セッション単位の worktree は切らない。

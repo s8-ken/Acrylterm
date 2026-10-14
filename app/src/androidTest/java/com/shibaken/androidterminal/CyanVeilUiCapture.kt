@@ -53,10 +53,10 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
                 extensions = SessionExt(session, app, scope)
                 setFlow(session, "_ext", extensions)
                 setFlow(session, "_state", ConnState.Connected)
-                val tabs = listOf("androidTerminal", "infra", "notes").mapIndexed { i, label -> TabInfo("t$i", "w1", label = label) }
+                val tabs = listOf("dev", "review", "logs").mapIndexed { i, label -> TabInfo("t$i", "w1", label = label) }
                 val panes = tabs.mapIndexed { i, tab -> PaneInfo("p$i", "w1", tab.tabId,
                     label = listOf("Codex", "deploy", "shell")[i],
-                    agentStatus = listOf(AgentStatus.BLOCKED, AgentStatus.WORKING, AgentStatus.IDLE)[i]) }
+                    agentStatus = listOf(AgentStatus.WORKING, AgentStatus.BLOCKED, AgentStatus.IDLE)[i]) }
                 val state = HerdrState(phase = HerdrState.Phase.READY,
                     workspaces = listOf(WorkspaceInfo("w1", label = "Development")), tabs = tabs, panes = panes,
                     focusedWorkspaceId = "w1", focusedTabId = "t0", focusedPaneId = "p0")
@@ -84,18 +84,52 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
             click("セッションを開く")
             awaitNode { it.contentDescription?.startsWith("タブ一覧") == true }
             capture("terminal")
-            click("タブ一覧", prefix = true)
-            awaitNode { it.text?.toString() == "タブとペイン" }
-            capture("overview")
-            var card = awaitNode { it.contentDescription?.startsWith("androidTerminal、") == true }
-            while (!card.isLongClickable) card = checkNotNull(card.parent)
-            check(card.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK))
+            verifyTopTargets()
+            verifyWorkspaceIndicators()
+            verifyFullscreen(activity)
+            verifyTerminalMenu()
+            verifyMissingWorkspacePrompt()
+            val originalTabs = session.herdr!!.state.value
+            val longTitle = "androidTerminal-with-a-very-long-title"
+            instrumentation.runOnMainSync { setFlow(session.herdr!!, "_state", originalTabs.copy(tabs = originalTabs.tabs.map { if (it.tabId == "t0") it.copy(label = longTitle) else it })) }
             settle()
-            click("androidTerminalを閉じる")
-            awaitNode { it.text?.toString() == "タブを閉じる" }
-            click("キャンセル")
-            awaitNode { it.text?.toString() == "タブとペイン" }
+            verifyTopTargets(longTitle)
+            capture("terminal-long-title")
+            instrumentation.runOnMainSync { setFlow(session.herdr!!, "_state", originalTabs) }
+            settle()
+            click("devを閉じる")
+            awaitNode { it.text?.toString() == "元に戻す" }
+            check(session.herdr!!.state.value.tabs.size == 3) { "Undo must keep the raw remote tabs alive" }
+            check(session.panes.value.size == 3) { "Undo must keep pane backends alive" }
+            click("元に戻す")
+            check(session.herdr!!.pendingTabCloses.value.isEmpty())
+            click("タブ一覧", prefix = true)
+            awaitNode { it.text?.toString() == "3 個のタブ" }
+            capture("overview")
+            verifyOverviewActions()
+            click("logsのプレビューを拡大")
+            awaitNode { it.text?.toString() == "このタブを開く" }
+            check(session.herdr!!.state.value.focusedTabId == "t0") { "Preview must not change focus" }
+            capture("expanded-preview")
+            click("プレビューを閉じる")
+            swipeCard("review")
+            awaitNode { it.text?.toString() == "2 個のタブ" }
+            capture("overview-undo")
+            click("元に戻す")
+            awaitNode { it.text?.toString() == "3 個のタブ" }
+            instrumentation.runOnMainSync { (0..2).forEach { session.herdr!!.closeTabWithUndo("t$it") } }
+            awaitNode { it.text?.toString() == "0 個のタブ" }
+            check(session.herdr!!.state.value.tabs.size == 3 && session.panes.value.size == 3)
+            capture("overview-all-closed")
+            instrumentation.runOnMainSync { (0..2).forEach { session.herdr!!.undoCloseTab("t$it") } }
+            awaitNode { it.text?.toString() == "3 個のタブ" }
             click("一覧を閉じる")
+            click("メニュー")
+            click("ワークスペースを開く")
+            awaitNode { it.text?.toString() == "Development" }
+            capture("workspaces")
+            instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+            settle()
             click("キーボードの表示/非表示")
             capture("terminal-keyboard")
             click("キーボードの表示/非表示")
@@ -126,7 +160,240 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
         }
     }
 
+    private fun verifyWorkspaceIndicators() {
+        val controller = session.herdr!!
+        val before = controller.state.value
+        awaitNode { it.contentDescription?.toString() == "Mac mini / Development" }
+        capture("workspace-header")
+        click("タブ一覧", prefix = true)
+        awaitNode { it.contentDescription?.toString() == "Development、表示中" }
+        val multiple = before.copy(workspaces = before.workspaces + WorkspaceInfo("w2", label = "Operations"),
+            tabs = before.tabs + TabInfo("t3", "w2", label = "ops"),
+            panes = before.panes + PaneInfo("p3", "w2", "t3", label = "ops"))
+        instrumentation.runOnMainSync { setFlow(controller, "_state", multiple) }
+        settle()
+        click("Operations")
+        awaitNode { it.text?.toString() == "1 個のタブ" }
+        awaitNode { it.contentDescription?.toString() == "Development、表示中" }
+        check(controller.state.value.focusedWorkspaceId == "w1") { "Filtering must not change server focus" }
+        capture("workspace-filter-other")
+        instrumentation.runOnMainSync { setFlow(controller, "_state", multiple.copy(focusedWorkspaceId = "w2", focusedTabId = "t3", focusedPaneId = "p3")) }
+        awaitNode { it.contentDescription?.toString() == "Operations、表示中" }
+        check(find { it.contentDescription?.toString() == "Development、表示中" } == null)
+        capture("workspace-active-follow")
+        instrumentation.runOnMainSync { setFlow(controller, "_state", multiple.copy(focusedWorkspaceId = null, focusedTabId = null, focusedPaneId = null)) }
+        settle()
+        check(find { it.contentDescription?.endsWith("、表示中") == true } == null)
+        click("一覧を閉じる")
+        awaitNode { it.contentDescription?.toString() == "Mac mini / ワークスペース未選択" }
+        capture("workspace-header-none")
+        val originalProfile = session.profile
+        val longHost = "Mac-mini-with-a-very-long-hostname"
+        val longWorkspace = "Development-workspace-with-a-very-long-name"
+        val profile = session.javaClass.getDeclaredField("profile").apply { isAccessible = true }
+        instrumentation.runOnMainSync {
+            profile.set(session, originalProfile.copy(name = longHost))
+            setFlow(controller, "_state", before.copy(workspaces = before.workspaces.map { it.copy(label = longWorkspace) }))
+        }
+        awaitNode { it.contentDescription?.toString() == "$longHost / $longWorkspace" }
+        verifyTopTargets()
+        var full = awaitNode { it.contentDescription?.toString() == "全画面表示" }
+        while (!full.isClickable) full = checkNotNull(full.parent)
+        val bounds = android.graphics.Rect().also { full.getBoundsInScreen(it) }
+        check(bounds.width() >= (48 * app.resources.displayMetrics.density).toInt() - 1 && bounds.right <= app.resources.displayMetrics.widthPixels)
+        capture("workspace-header-long")
+        click("タブ一覧", prefix = true)
+        awaitNode { it.contentDescription?.toString() == "$longWorkspace、表示中" }
+        capture("workspace-marker-long")
+        click("一覧を閉じる")
+        instrumentation.runOnMainSync { profile.set(session, originalProfile); setFlow(controller, "_state", before) }
+        awaitNode { it.contentDescription?.toString() == "Mac mini / Development" }
+    }
+
+    private fun verifyTerminalMenu() {
+        click("メニュー")
+        check(find { it.text?.toString() == "メッセージを作成" } == null)
+        check(find { it.text?.toString()?.contains("直接入力") == true } == null)
+        check(find { it.text?.toString() == "切断" || it.text?.toString() == "セッションを閉じる" } == null)
+        awaitNode { it.text?.toString() == "接続を閉じる" }
+        capture("terminal-menu")
+        click("接続を閉じる")
+        awaitNode { it.text?.toString() == "接続を閉じますか？" }
+        capture("close-connection-confirm")
+        click("キャンセル")
+        check(app.sessions.get(session.id) === session && session.state.value is ConnState.Connected)
+        awaitNode { it.text?.toString() == "日本語で返信を作成…" }
+    }
+
+    private fun verifyMissingWorkspacePrompt() {
+        val controller = session.herdr!!
+        val before = controller.state.value
+        instrumentation.runOnMainSync { setFlow(controller, "_state", before.copy(workspaces = emptyList(), tabs = emptyList(),
+            panes = emptyList(), layouts = emptyMap(), focusedWorkspaceId = null, focusedTabId = null, focusedPaneId = null)) }
+        settle()
+        click("新しいタブ")
+        awaitNode { it.text?.toString() == "アクティブなワークスペースがありません" }
+        capture("missing-workspace")
+        click("キャンセル")
+        check(!controller.workspaceRequired.value && controller.state.value.workspaces.isEmpty())
+        click("新しいタブ")
+        click("作成") // Offline fixture: request path fails safely without making a network connection.
+        awaitCondition { !controller.workspaceRequired.value }
+        check(controller.state.value.workspaces.isEmpty())
+        instrumentation.runOnMainSync { setFlow(controller, "_state", before); setFlow(controller, "_workspaceRequired", true) }
+        awaitNode { it.text?.toString() == "アクティブなワークスペースがありません" }
+        click("キャンセル")
+        check(controller.state.value == before)
+    }
+
+    private fun verifyOverviewActions() {
+        val controller = session.herdr!!
+        val before = controller.state.value
+        click("タブ一覧メニュー")
+        awaitNode { it.text?.toString() == "新しいワークスペース" }
+        check(find { it.text?.toString() == "外観設定" || it.text?.toString() == "貼り付け" } == null)
+        capture("overview-menu")
+        click("新しいワークスペース")
+        awaitNode { it.text?.toString() == "最初のタブを含むワークスペースを作成します。" }
+        capture("new-workspace")
+        click("キャンセル")
+        check(controller.state.value == before)
+        for (label in listOf("すべてのタブを閉じる", "すべてのワークスペースを閉じる")) {
+            click("タブ一覧メニュー")
+            click(label)
+            awaitNode { it.text?.toString()?.contains("表示フィルタにかかわらず全ワークスペースが対象") == true }
+            awaitNode { it.text?.toString() == "すべて閉じる" }
+            capture(if (label == "すべてのタブを閉じる") "close-all-tabs-confirm" else "close-all-workspaces-confirm")
+            click("キャンセル")
+            check(controller.state.value == before && controller.pendingTabCloses.value.isEmpty())
+        }
+        // Long partial errors scroll inside the dialog and never push its OK action off-screen.
+        val plan = before.bulkClosePlan(BulkCloseKind.TABS).copy(ids = (1..5).map { "failed-$it" })
+        val failure = "終了に失敗しました。".repeat(12)
+        instrumentation.runOnMainSync { setFlow(controller, "_bulkCloseResult", BulkCloseResult(plan, 0, plan.ids.map { BulkCloseFailure(it, failure) })) }
+        awaitNode { it.text?.toString() == "一部を閉じられませんでした" }
+        val ok = awaitNode { it.text?.toString() == "OK" }
+        val bounds = android.graphics.Rect().also { ok.getBoundsInScreen(it) }
+        check(bounds.bottom <= app.resources.displayMetrics.heightPixels)
+        capture("bulk-close-errors")
+        click("OK")
+        check(controller.bulkCloseResult.value == null)
+    }
+
+    private fun verifyFullscreen(activity: MainActivity) {
+        val before = terminalView(activity)
+        val normalHeight = before.height
+        val rawBefore = session.herdr!!.state.value
+        click("全画面表示")
+        dismissSystemFullscreenHint()
+        awaitNode { it.contentDescription?.toString() == "全画面を解除" }
+        check(find { it.contentDescription?.startsWith("タブ一覧") == true } == null)
+        check(find { it.text?.toString() == "ESC" } == null)
+        check(terminalView(activity) === before) { "Fullscreen must keep the terminal and IME target alive" }
+        check(before.height > normalHeight + (120 * app.resources.displayMetrics.density).toInt()) { "Fullscreen must visibly expand the terminal" }
+        check(session.herdr!!.state.value == rawBefore) { "Fullscreen must not depend on remote pane.zoom" }
+        capture("terminal-fullscreen")
+        click("キーボードの表示/非表示")
+        awaitCondition { imeVisible(activity) }
+        capture("terminal-fullscreen-keyboard")
+        instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        awaitCondition { !imeVisible(activity) }
+        awaitNode { it.contentDescription?.toString() == "全画面を解除" }
+        click("全画面を解除")
+        awaitNode { it.contentDescription?.toString() == "全画面表示" }
+        awaitCondition { systemBarsVisible(activity) }
+        check(terminalView(activity) === before)
+        capture("terminal-fullscreen-restored")
+        // Enter with IME already visible; Back dismisses it first, then exits fullscreen.
+        click("キーボードの表示/非表示")
+        awaitCondition { imeVisible(activity) }
+        click("全画面表示")
+        awaitCondition { imeVisible(activity) }
+        awaitNode { it.contentDescription?.toString() == "全画面を解除" }
+        instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        awaitCondition { !imeVisible(activity) }
+        awaitNode { it.contentDescription?.toString() == "全画面を解除" }
+        instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        awaitNode { it.contentDescription?.toString() == "全画面表示" }
+        awaitNode { it.contentDescription?.startsWith("タブ一覧") == true }
+        awaitCondition { systemBarsVisible(activity) }
+    }
+
+    private fun dismissSystemFullscreenHint() {
+        // Android can show a delayed, one-time immersive-mode education window on fresh emulators.
+        val deadline = android.os.SystemClock.uptimeMillis() + 3_000
+        do {
+            if (find { it.text?.toString() == "Got it" } != null) {
+                click("Got it")
+                return
+            }
+            android.os.SystemClock.sleep(100)
+        } while (android.os.SystemClock.uptimeMillis() < deadline)
+    }
+
+    private fun terminalView(activity: MainActivity): com.shibaken.androidterminal.terminal.TerminalCanvasView {
+        var found: com.shibaken.androidterminal.terminal.TerminalCanvasView? = null
+        instrumentation.runOnMainSync {
+            fun visit(view: android.view.View) {
+                if (view is com.shibaken.androidterminal.terminal.TerminalCanvasView && view.isPaneFocused) found = view
+                if (view is android.view.ViewGroup) for (i in 0 until view.childCount) visit(view.getChildAt(i))
+            }
+            visit(activity.window.decorView)
+        }
+        return checkNotNull(found)
+    }
+
+    private fun imeVisible(activity: MainActivity): Boolean {
+        var visible = false
+        instrumentation.runOnMainSync {
+            visible = androidx.core.view.ViewCompat.getRootWindowInsets(activity.window.decorView)
+                ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+        }
+        return visible
+    }
+
+    private fun systemBarsVisible(activity: MainActivity): Boolean {
+        var visible = false
+        instrumentation.runOnMainSync {
+            visible = androidx.core.view.ViewCompat.getRootWindowInsets(activity.window.decorView)
+                ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.statusBars() or androidx.core.view.WindowInsetsCompat.Type.navigationBars()) == true
+        }
+        return visible
+    }
+
+    private fun swipeCard(title: String) {
+        val node = awaitNode { it.contentDescription?.startsWith("$title、") == true }
+        val rect = android.graphics.Rect().also { node.getBoundsInScreen(it) }
+        val startX = rect.centerX().toFloat(); val startY = rect.centerY().toFloat()
+        val delta = 96 * app.resources.displayMetrics.density * if (startX < app.resources.displayMetrics.widthPixels / 2) 1 else -1
+        val started = android.os.SystemClock.uptimeMillis()
+        fun send(action: Int, x: Float, elapsed: Long) {
+            val event = android.view.MotionEvent.obtain(started, started + elapsed, action, x, startY, 0)
+            check(instrumentation.uiAutomation.injectInputEvent(event, true))
+            event.recycle()
+        }
+        send(android.view.MotionEvent.ACTION_DOWN, startX, 0)
+        for (i in 1..6) send(android.view.MotionEvent.ACTION_MOVE, startX + delta * i / 6, i * 35L)
+        send(android.view.MotionEvent.ACTION_UP, startX + delta, 250)
+        settle()
+    }
+
+    private fun verifyTopTargets(selectedTitle: String = "dev") {
+        val density = app.resources.displayMetrics.density
+        val centers = mutableListOf<Int>()
+        for (label in listOf("${selectedTitle}を閉じる", "新しいタブ", "タブ一覧", "メニュー")) {
+            var node = awaitNode { it.contentDescription?.startsWith(label) == true }
+            while (!node.isClickable) node = checkNotNull(node.parent)
+            val bounds = android.graphics.Rect().also { node.getBoundsInScreen(it) }
+            check(bounds.width() >= (48 * density).toInt() - 1 && bounds.height() >= (48 * density).toInt() - 1) { "$label needs a 48dp target: $bounds" }
+            check(bounds.left >= 0 && bounds.right <= app.resources.displayMetrics.widthPixels) { "$label must stay fully visible: $bounds" }
+            centers += bounds.centerY()
+        }
+        check(centers.max() - centers.min() <= density.toInt() + 1) { "B2 actions must stay on one row" }
+    }
+
     private fun verifyExtensions(host: HostProfile) {
+        click("メニュー")
         click("ホスト一覧")
         scrollTo("拡張スクリプト")
         click("拡張スクリプト")
@@ -173,6 +440,7 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
         awaitCondition { extensions.log.value.any { "CYAN_UI_KEY" in it } }
         capture("extension-keys")
 
+        click("メニュー")
         click("ホスト一覧")
         click("${host.name}を編集")
         scrollTo("このホストで有効にする")

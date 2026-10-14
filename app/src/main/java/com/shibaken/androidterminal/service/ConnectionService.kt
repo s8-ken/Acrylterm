@@ -37,7 +37,7 @@ class ConnectionService : Service() {
             PendingIntent.FLAG_IMMUTABLE,
         )
         val n = NotificationCompat.Builder(this, App.CHANNEL_SESSION)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("${count} 件の SSH セッションに接続中")
             .setContentIntent(open)
             .addAction(0, "すべて切断", disconnect)

@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,7 +43,7 @@ fun HostListScreen(
         Column(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 20.dp)) {
             Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("androidTerminal", fontSize = 25.sp, fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.app_name), fontSize = 25.sp, fontWeight = FontWeight.Medium)
                     Text("YOUR PRIVATE CONNECTION", fontSize = 10.sp, letterSpacing = 1.sp, color = CyanVeil.Muted)
                 }
                 VeilIconButton(R.drawable.veil_tune, "外観設定", onAppearance)

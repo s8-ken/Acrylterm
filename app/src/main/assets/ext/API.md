@@ -1,6 +1,6 @@
-# androidTerminal extension API (Lua)
+# Veildeck extension API (Lua)
 
-You (an AI coding agent) can customize the androidTerminal Android app by writing Lua files into
+You (an AI coding agent) can customize the Veildeck Android app by writing Lua files into
 `~/.config/androidterminal/*.lua` on this machine. No install is needed on the PC side.
 
 ## Reload loop
