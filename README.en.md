@@ -10,6 +10,29 @@ When the host runs [herdr](docs/herdr-api.md), its tabs, panes, and workspaces b
 
 ## Features
 
+### Built-in Tailscale
+
+<img src="docs/images/tailscale.png" alt="Tailscale screen" width="240">
+
+- Embeds `tsnet` in the app. It does not use the VPN slot, so it works alongside the official app
+- Start it from "Tailscale" on the host list and log in. Auth keys also work
+- Optional; the app builds without it
+
+### SSH key management
+
+<img src="docs/images/ssh-keys.png" alt="SSH keys screen" width="240">
+
+- Generate Ed25519 / RSA keys, import existing keys, copy and share public keys
+- Private keys are encrypted with the Android Keystore
+- Optionally require biometric authentication on use
+
+### Adding hosts and connecting
+
+<img src="docs/images/host-list.png" alt="Host list" width="240">
+
+- Connect from the host list, which shows connected sessions and how many panes are waiting for input
+- **Mosh**: enabled per host. Panes survive network changes, and the app falls back to SSH if Mosh fails
+
 ### Tabs / panes / workspaces
 
 <img src="docs/images/terminal-panes.png" alt="Split panes (git log on top, htop below)" width="240">
@@ -29,22 +52,6 @@ The app drives herdr's socket API directly over SSH.
 - Android notification when an agent is waiting for input
 - A reply bar on waiting panes (approve / choices / cancel / compose)
 - Preview pane contents from the overview
-
-### Connecting
-
-<img src="docs/images/host-list.png" alt="Host list" width="240">
-
-- Connect from the host list, which shows connected sessions and how many panes are waiting for input
-- **Mosh**: enabled per host. Panes survive network changes, and the app falls back to SSH if Mosh fails
-- **Built-in Tailscale**: embeds `tsnet` in the app. It does not use the VPN slot, so it works alongside the official app. Optional; the app builds without it
-
-### SSH key management
-
-<img src="docs/images/ssh-keys.png" alt="SSH keys screen" width="240">
-
-- Generate Ed25519 / RSA keys, import existing keys, copy and share public keys
-- Private keys are encrypted with the Android Keystore
-- Optionally require biometric authentication on use
 
 ### Input and scrolling
 

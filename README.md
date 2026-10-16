@@ -8,6 +8,29 @@ Acrylterm（アクリルターム）は、自分の Mac や Linux マシンに S
 
 ## 主な機能
 
+### Tailscale 内蔵
+
+<img src="docs/images/tailscale.png" alt="Tailscale の画面" width="240">
+
+- `tsnet` をアプリに組み込む。VPN 枠を使わないので、公式アプリと併用できる
+- ホスト一覧の「Tailscale」から開始し、ログインする。認証キーも使える
+- 後から追加できるオプションで、無くてもビルドできる
+
+### SSH 鍵管理
+
+<img src="docs/images/ssh-keys.png" alt="SSH 鍵の画面" width="240">
+
+- Ed25519 / RSA の生成、既存鍵のインポート、公開鍵のコピーと共有
+- 秘密鍵は Android Keystore で暗号化して保存
+- 使用時に生体認証を求める設定も可能
+
+### ホストの登録と接続
+
+<img src="docs/images/host-list.png" alt="ホスト一覧" width="240">
+
+- ホスト一覧から接続する。接続中のセッションと、入力待ちのペインの数が出る
+- **Mosh**:ホストごとに有効化。回線が切り替わってもペインを維持し、失敗時は SSH に自動で戻る
+
 ### タブ / ペイン / ワークスペース
 
 <img src="docs/images/terminal-panes.png" alt="分割したペイン(上は git log、下は htop)" width="240">
@@ -27,22 +50,6 @@ herdr のソケット API を SSH 経由で直接操作します。
 - エージェントが入力待ちになると Android 通知
 - 入力待ちのペインには返信バー(承認 / 選択肢 / キャンセル / 作成)
 - 一覧画面でペインの内容をプレビュー
-
-### 接続
-
-<img src="docs/images/host-list.png" alt="ホスト一覧" width="240">
-
-- ホスト一覧から接続する。接続中のセッションと、入力待ちのペインの数が出る
-- **Mosh**:ホストごとに有効化。回線が切り替わってもペインを維持し、失敗時は SSH に自動で戻る
-- **Tailscale 内蔵**:`tsnet` をアプリに組み込む。VPN 枠を使わないので、公式アプリと併用できる。後から追加できるオプションで、無くてもビルドできる
-
-### SSH 鍵管理
-
-<img src="docs/images/ssh-keys.png" alt="SSH 鍵の画面" width="240">
-
-- Ed25519 / RSA の生成、既存鍵のインポート、公開鍵のコピーと共有
-- 秘密鍵は Android Keystore で暗号化して保存
-- 使用時に生体認証を求める設定も可能
 
 ### 入力とスクロール
 
