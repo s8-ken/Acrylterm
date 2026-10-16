@@ -56,6 +56,9 @@ import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.automirrored.filled.ViewQuilt
+import androidx.compose.material.icons.filled.HorizontalSplit
+import androidx.compose.material.icons.filled.VerticalSplit
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -348,6 +351,14 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                             Item("セッション一覧", Icons.Filled.Dns) { showSessionPicker = true; session.refreshHerdrSessions() }
                             Item("ワークスペース一覧", Icons.Filled.Menu) { scope.launch { drawerState.open() } }
                             Item("タブ一覧", Icons.Filled.GridView) { showOverview = true }
+                            if (isPanes && focusedPaneId != null) {
+                                Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.AutoMirrored.Filled.ViewQuilt, null, tint = tint)
+                                    Text("ペインを分割", Modifier.weight(1f).padding(start = 12.dp), style = MaterialTheme.typography.bodyLarge)
+                                    IconButton(onClick = { menu = false; herdr.split("right") }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.VerticalSplit, "右に分割", tint = CyanVeil.Cyan) }
+                                    IconButton(onClick = { menu = false; herdr.split("down") }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.HorizontalSplit, "下に分割", tint = CyanVeil.Cyan) }
+                                }
+                            }
                         }
                         if (extensionsEnabled && session.profile.extEnabled) {
                             HorizontalDivider()
