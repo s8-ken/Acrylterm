@@ -36,6 +36,7 @@ When the host runs [herdr](docs/herdr-api.md), its tabs, panes, and workspaces b
 ### Tabs / panes / workspaces
 
 <img src="docs/images/terminal-panes.png" alt="Split panes (git log on top, htop below)" width="240">
+<img src="docs/images/tab-overview.png" alt="Tab overview" width="240">
 
 The app drives herdr's socket API directly over SSH.
 
@@ -126,8 +127,6 @@ Steps for a Mac:
 - Panes waiting for input show a reply bar along the bottom edge
 
 ### Tabs and menu
-
-<img src="docs/images/tab-overview.png" alt="Tab overview" width="240">
 
 - Tap the tab bar at the top to switch tabs; long-press a tab to rename it
 - Tap "＋" for a new shell tab; long-press it to choose a shell or agent tab

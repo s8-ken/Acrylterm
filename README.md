@@ -34,6 +34,7 @@ Acrylterm（アクリルターム）は、自分の Mac や Linux マシンに S
 ### タブ / ペイン / ワークスペース
 
 <img src="docs/images/terminal-panes.png" alt="分割したペイン(上は git log、下は htop)" width="240">
+<img src="docs/images/tab-overview.png" alt="タブ一覧" width="240">
 
 herdr のソケット API を SSH 経由で直接操作します。
 
@@ -124,8 +125,6 @@ Mac の場合の手順です。
 - 入力待ちのペインには、下端に返信バーが出ます
 
 ### タブとメニュー
-
-<img src="docs/images/tab-overview.png" alt="タブ一覧" width="240">
 
 - 上部のタブバーをタップしてタブを切り替え、タブを長押しで名前を変更
 - 「＋」をタップでシェルのタブ、長押しでシェルまたはエージェントのタブを選んで作成
