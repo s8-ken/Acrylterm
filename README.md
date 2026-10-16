@@ -10,7 +10,7 @@ Acrylterm（アクリルターム）は、自分の Mac や Linux マシンに S
 
 ### タブ / ペイン / ワークスペース
 
-<img src="docs/images/terminal-panes.png" alt="分割したペイン(上は git log、下は htop)" width="240" align="right">
+<img src="docs/images/terminal-panes.png" alt="分割したペイン(上は git log、下は htop)" width="240">
 
 herdr のソケット API を SSH 経由で直接操作します。
 
@@ -20,37 +20,29 @@ herdr のソケット API を SSH 経由で直接操作します。
 - エージェント等が作った既存ワークツリーの一覧表示・開く、herdr セッションの切り替え
 - ホストに herdr が無いときは通常のシェルを開く
 
-<br clear="right">
-
 ### AI エージェントの見守り
 
-<img src="docs/images/agent-reply.png" alt="Claude Code の質問に返信バーから答える" width="240" align="right">
+<img src="docs/images/agent-reply.png" alt="Claude Code の質問に返信バーから答える" width="240">
 
 - エージェントが入力待ちになると Android 通知
 - 入力待ちのペインには返信バー(承認 / 選択肢 / キャンセル / 作成)
 - 一覧画面でペインの内容をプレビュー
 
-<br clear="right">
-
 ### 接続
 
-<img src="docs/images/host-list.png" alt="ホスト一覧" width="240" align="right">
+<img src="docs/images/host-list.png" alt="ホスト一覧" width="240">
 
 - ホスト一覧から接続する。接続中のセッションと、入力待ちのペインの数が出る
 - **Mosh**:ホストごとに有効化。回線が切り替わってもペインを維持し、失敗時は SSH に自動で戻る
 - **Tailscale 内蔵**:`tsnet` をアプリに組み込む。VPN 枠を使わないので、公式アプリと併用できる。後から追加できるオプションで、無くてもビルドできる
 
-<br clear="right">
-
 ### SSH 鍵管理
 
-<img src="docs/images/ssh-keys.png" alt="SSH 鍵の画面" width="240" align="right">
+<img src="docs/images/ssh-keys.png" alt="SSH 鍵の画面" width="240">
 
 - Ed25519 / RSA の生成、既存鍵のインポート、公開鍵のコピーと共有
 - 秘密鍵は Android Keystore で暗号化して保存
 - 使用時に生体認証を求める設定も可能
-
-<br clear="right">
 
 ### 入力とスクロール
 
@@ -126,15 +118,13 @@ Mac の場合の手順です。
 
 ### タブとメニュー
 
-<img src="docs/images/tab-overview.png" alt="タブ一覧" width="240" align="right">
+<img src="docs/images/tab-overview.png" alt="タブ一覧" width="240">
 
 - 上部のタブバーをタップしてタブを切り替え、タブを長押しで名前を変更
 - 「＋」をタップでシェルのタブ、長押しでシェルまたはエージェントのタブを選んで作成
 - タブ数のアイコンからタブ一覧を開く。カードをタップで移動、長押しでプレビューを拡大、横スワイプで閉じる
 - 「⋮」メニューから、セッション一覧、ワークスペース一覧、タブ一覧、ペインの分割、拡張、設定、再接続、切断
 - 切断しても、ホスト側のタブとワークスペースは閉じません
-
-<br clear="right">
 
 ### 補助キー
 
@@ -146,7 +136,7 @@ Mac の場合の手順です。
 
 ## 外観
 
-<img src="docs/images/appearance.png" alt="外観の設定" width="240" align="right">
+<img src="docs/images/appearance.png" alt="外観の設定" width="240">
 
 「⋮」メニューの「設定」で、色プロファイル、背景の透明度、壁紙のぼかしを変えられます。
 
@@ -155,8 +145,6 @@ Mac の場合の手順です。
 - 「背景をぼかす」は壁紙だけに適用される。Android 12 未満では、グラデーションをなだらかにして近い効果を出す
 
 配色の設計は [design/cyan-veil/](design/cyan-veil/README.md)、アイコンの原稿は [design/acrylterm/](design/acrylterm/README.md) にあります。
-
-<br clear="right">
 
 ## Lua 拡張
 

@@ -12,7 +12,7 @@ When the host runs [herdr](docs/herdr-api.md), its tabs, panes, and workspaces b
 
 ### Tabs / panes / workspaces
 
-<img src="docs/images/terminal-panes.png" alt="Split panes (git log on top, htop below)" width="240" align="right">
+<img src="docs/images/terminal-panes.png" alt="Split panes (git log on top, htop below)" width="240">
 
 The app drives herdr's socket API directly over SSH.
 
@@ -22,37 +22,29 @@ The app drives herdr's socket API directly over SSH.
 - List and open worktrees made by agents on the host, switch herdr sessions
 - Falls back to a plain shell when herdr is not installed on the host
 
-<br clear="right">
-
 ### Watching AI agents
 
-<img src="docs/images/agent-reply.png" alt="Answering Claude Code's question from the reply bar" width="240" align="right">
+<img src="docs/images/agent-reply.png" alt="Answering Claude Code's question from the reply bar" width="240">
 
 - Android notification when an agent is waiting for input
 - A reply bar on waiting panes (approve / choices / cancel / compose)
 - Preview pane contents from the overview
 
-<br clear="right">
-
 ### Connecting
 
-<img src="docs/images/host-list.png" alt="Host list" width="240" align="right">
+<img src="docs/images/host-list.png" alt="Host list" width="240">
 
 - Connect from the host list, which shows connected sessions and how many panes are waiting for input
 - **Mosh**: enabled per host. Panes survive network changes, and the app falls back to SSH if Mosh fails
 - **Built-in Tailscale**: embeds `tsnet` in the app. It does not use the VPN slot, so it works alongside the official app. Optional; the app builds without it
 
-<br clear="right">
-
 ### SSH key management
 
-<img src="docs/images/ssh-keys.png" alt="SSH keys screen" width="240" align="right">
+<img src="docs/images/ssh-keys.png" alt="SSH keys screen" width="240">
 
 - Generate Ed25519 / RSA keys, import existing keys, copy and share public keys
 - Private keys are encrypted with the Android Keystore
 - Optionally require biometric authentication on use
-
-<br clear="right">
 
 ### Input and scrolling
 
@@ -128,15 +120,13 @@ Steps for a Mac:
 
 ### Tabs and menu
 
-<img src="docs/images/tab-overview.png" alt="Tab overview" width="240" align="right">
+<img src="docs/images/tab-overview.png" alt="Tab overview" width="240">
 
 - Tap the tab bar at the top to switch tabs; long-press a tab to rename it
 - Tap "＋" for a new shell tab; long-press it to choose a shell or agent tab
 - The tab-count icon opens the tab overview. Tap a card to go there, long-press to enlarge the preview, swipe sideways to close
 - The "⋮" menu has sessions, workspaces, tabs, pane splitting, extensions, settings, reconnect, and disconnect
 - Disconnecting does not close the tabs or workspaces on the host
-
-<br clear="right">
 
 ### Extra keys
 
@@ -148,7 +138,7 @@ Steps for a Mac:
 
 ## Appearance
 
-<img src="docs/images/appearance.png" alt="Appearance settings" width="240" align="right">
+<img src="docs/images/appearance.png" alt="Appearance settings" width="240">
 
 "設定" (Settings) in the "⋮" menu changes the color profile, background transparency, and wallpaper blur.
 
@@ -157,8 +147,6 @@ Steps for a Mac:
 - "背景をぼかす" (blur background) applies to the wallpaper only. Below Android 12, a smoothed gradient approximates the effect
 
 The color design is in [design/cyan-veil/](design/cyan-veil/README.md), and the icon sources are in [design/acrylterm/](design/acrylterm/README.md).
-
-<br clear="right">
 
 ## Lua extensions
 
