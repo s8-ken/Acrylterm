@@ -8,55 +8,64 @@ When the host runs [herdr](docs/herdr-api.md), its tabs, panes, and workspaces b
 
 > The app's UI is currently in Japanese. UI labels below are quoted in Japanese with an English gloss.
 
-## Screenshots
-
-<table>
-  <tr>
-    <td width="33%"><img src="docs/images/terminal-panes.png" alt="Split panes"></td>
-    <td width="33%"><img src="docs/images/agent-reply.png" alt="Replying to an agent"></td>
-    <td width="33%"><img src="docs/images/tab-overview.png" alt="Tab overview"></td>
-  </tr>
-  <tr>
-    <td><b>Split panes</b><br>Panes split in herdr are shown as they are (git log on top, htop below)</td>
-    <td><b>Agent waiting for input</b><br>Answer Claude Code's question from the reply bar at the bottom</td>
-    <td><b>Tab overview</b><br>Filter by workspace; tabs waiting for input are marked</td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/host-list.png" alt="Host list"></td>
-    <td><img src="docs/images/appearance.png" alt="Appearance settings"></td>
-    <td><img src="docs/images/ssh-keys.png" alt="SSH keys"></td>
-  </tr>
-  <tr>
-    <td><b>Host list</b><br>Shows connected sessions and how many panes are waiting for input</td>
-    <td><b>Appearance</b><br>Pick a color profile and the background transparency</td>
-    <td><b>SSH keys</b><br>Generate or import keys; copy or share the public key</td>
-  </tr>
-</table>
-
 ## Features
 
-- **Tabs / panes / workspaces**: drives herdr's socket API directly over SSH
-  - Shows the pane layout split on the host as is. Tap to switch panes, drag a divider to resize
-  - Create, rename, and close tabs, workspaces, and panes (closing a tab can be undone)
-  - Open agent tabs as well as shell tabs
-  - List and open worktrees made by agents on the host, switch herdr sessions
-  - Falls back to a plain shell when herdr is not installed on the host
-- **Watching AI agents**
-  - Android notification when an agent is waiting for input
-  - A reply bar on waiting panes (approve / choices / cancel / compose)
-  - Preview pane contents from the overview
+### Tabs / panes / workspaces
+
+<img src="docs/images/terminal-panes.png" alt="Split panes (git log on top, htop below)" width="240" align="right">
+
+The app drives herdr's socket API directly over SSH.
+
+- Split a pane right or down from the "⋮" menu. Layouts split on the host are shown as is. Tap to switch panes, drag a divider to resize
+- Create, rename, and close tabs, workspaces, and panes (closing a tab can be undone)
+- Open agent tabs as well as shell tabs
+- List and open worktrees made by agents on the host, switch herdr sessions
+- Falls back to a plain shell when herdr is not installed on the host
+
+<br clear="right">
+
+### Watching AI agents
+
+<img src="docs/images/agent-reply.png" alt="Answering Claude Code's question from the reply bar" width="240" align="right">
+
+- Android notification when an agent is waiting for input
+- A reply bar on waiting panes (approve / choices / cancel / compose)
+- Preview pane contents from the overview
+
+<br clear="right">
+
+### Connecting
+
+<img src="docs/images/host-list.png" alt="Host list" width="240" align="right">
+
+- Connect from the host list, which shows connected sessions and how many panes are waiting for input
 - **Mosh**: enabled per host. Panes survive network changes, and the app falls back to SSH if Mosh fails
 - **Built-in Tailscale**: embeds `tsnet` in the app. It does not use the VPN slot, so it works alongside the official app. Optional; the app builds without it
+
+<br clear="right">
+
+### SSH key management
+
+<img src="docs/images/ssh-keys.png" alt="SSH keys screen" width="240" align="right">
+
+- Generate Ed25519 / RSA keys, import existing keys, copy and share public keys
+- Private keys are encrypted with the Android Keystore
+- Optionally require biometric authentication on use
+
+<br clear="right">
+
+### Input and scrolling
+
 - **Japanese input**: shows the IME's composing text at the cursor and sends only committed text. The multi-line composer supports conversion and voice input
 - **Scrolling**
   - Shell panes fetch history from herdr as you scroll up
   - In TUI apps, fixed header and footer bands are detected and stay pinned while scrolling
 - **Text selection**: long-press to select, then copy / paste / select all
-- **SSH key management**: generate Ed25519 / RSA keys, import existing keys, copy and share public keys
-  - Private keys are encrypted with the Android Keystore
-  - Optionally require biometric authentication on use
-- **Appearance**: color profiles (Cyan Veil / Violet / Frost / Ember / Solar, plus custom), background transparency, wallpaper blur
-- **Lua extensions** (advanced): add macros, automations, and reply suggestions. You can also have an AI CLI on the host write them
+
+### Other
+
+- **Appearance**: color profiles (Cyan Veil / Violet / Frost / Ember / Solar, plus custom), background transparency, wallpaper blur. See [Appearance](#appearance)
+- **Lua extensions** (advanced): add macros, automations, and reply suggestions. You can also have an AI CLI on the host write them. See [Lua extensions](#lua-extensions)
 
 ## Requirements
 
@@ -119,11 +128,15 @@ Steps for a Mac:
 
 ### Tabs and menu
 
+<img src="docs/images/tab-overview.png" alt="Tab overview" width="240" align="right">
+
 - Tap the tab bar at the top to switch tabs; long-press a tab to rename it
 - Tap "＋" for a new shell tab; long-press it to choose a shell or agent tab
 - The tab-count icon opens the tab overview. Tap a card to go there, long-press to enlarge the preview, swipe sideways to close
-- The "⋮" menu has sessions, workspaces, tabs, extensions, settings, reconnect, and disconnect
+- The "⋮" menu has sessions, workspaces, tabs, pane splitting, extensions, settings, reconnect, and disconnect
 - Disconnecting does not close the tabs or workspaces on the host
+
+<br clear="right">
 
 ### Extra keys
 
@@ -135,6 +148,8 @@ Steps for a Mac:
 
 ## Appearance
 
+<img src="docs/images/appearance.png" alt="Appearance settings" width="240" align="right">
+
 "設定" (Settings) in the "⋮" menu changes the color profile, background transparency, and wallpaper blur.
 
 - Background transparency ranges from 0 to 100%, with presets 0% / 28% (recommended) / 55%. Text, the cursor, and explicit ANSI background colors are not faded
@@ -142,6 +157,8 @@ Steps for a Mac:
 - "背景をぼかす" (blur background) applies to the wallpaper only. Below Android 12, a smoothed gradient approximates the effect
 
 The color design is in [design/cyan-veil/](design/cyan-veil/README.md), and the icon sources are in [design/acrylterm/](design/acrylterm/README.md).
+
+<br clear="right">
 
 ## Lua extensions
 
