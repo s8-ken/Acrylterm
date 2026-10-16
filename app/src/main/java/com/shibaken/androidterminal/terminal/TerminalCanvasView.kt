@@ -122,6 +122,9 @@ class TerminalCanvasView @JvmOverloads constructor(
             isFocusableInTouchMode = value
         }
 
+    /** The composable that currently hosts this pooled view; only it may unbind the view on dispose. */
+    var paneOwner: Any? = null
+
     /** Tap on an unfocused pane (the tap is not forwarded as a click). */
     var onFocusRequest: (() -> Unit)? = null
     /** Second tap of a double tap on the focused pane; the first tap was already delivered as a click. */

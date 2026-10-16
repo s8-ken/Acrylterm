@@ -292,11 +292,18 @@ private fun PaneItem(
 ) {
     val scope = rememberCoroutineScope()
     var inHistory by remember(view) { mutableStateOf(view.inHistory) }
+    // Claimed from the AndroidView factory/update too: those run before an outgoing item's onDispose, effects after it.
+    val owner = remember(view, paneId) { Any() }
     DisposableEffect(view, paneId) {
+        view.paneOwner = owner
         // Local history scroller: fetch the pane's scrollback from herdr instead of forwarding wheel events.
         view.historyFetcher = { lines, result -> scope.launch { result(herdr.readPaneHistory(paneId, lines)) } }
         view.onHistoryChanged = { inHistory = it }
         onDispose {
+            // When the pane area is recomposed from scratch (e.g. the window widens), the new item takes over this
+            // pooled view before the old one is disposed; unbinding here would leave the pane blank.
+            if (view.paneOwner !== owner) return@onDispose
+            view.paneOwner = null
             view.historyFetcher = null; view.onHistoryChanged = null
             view.exitHistory()
             view.session = null
@@ -315,10 +322,12 @@ private fun PaneItem(
         AndroidView(
             factory = {
                 (view.parent as? ViewGroup)?.removeView(view)
+                view.paneOwner = owner
                 view
             },
             modifier = Modifier.weight(1f).fillMaxWidth().terminalGutters(),
             update = { v ->
+                v.paneOwner = owner
                 if (v.session !== backend) v.session = backend
                 v.importantForAccessibility = if (inputEnabled) android.view.View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
                     else android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
