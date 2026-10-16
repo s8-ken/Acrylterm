@@ -8,6 +8,31 @@ When the host runs [herdr](docs/herdr-api.md), its tabs, panes, and workspaces b
 
 > The app's UI is currently in Japanese. UI labels below are quoted in Japanese with an English gloss.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/images/terminal-panes.png" alt="Split panes"></td>
+    <td width="33%"><img src="docs/images/agent-reply.png" alt="Replying to an agent"></td>
+    <td width="33%"><img src="docs/images/tab-overview.png" alt="Tab overview"></td>
+  </tr>
+  <tr>
+    <td><b>Split panes</b><br>Panes split in herdr are shown as they are (git log on top, htop below)</td>
+    <td><b>Agent waiting for input</b><br>Answer Claude Code's question from the reply bar at the bottom</td>
+    <td><b>Tab overview</b><br>Filter by workspace; tabs waiting for input are marked</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/host-list.png" alt="Host list"></td>
+    <td><img src="docs/images/appearance.png" alt="Appearance settings"></td>
+    <td><img src="docs/images/ssh-keys.png" alt="SSH keys"></td>
+  </tr>
+  <tr>
+    <td><b>Host list</b><br>Shows connected sessions and how many panes are waiting for input</td>
+    <td><b>Appearance</b><br>Pick a color profile and the background transparency</td>
+    <td><b>SSH keys</b><br>Generate or import keys; copy or share the public key</td>
+  </tr>
+</table>
+
 ## Features
 
 - **Tabs / panes / workspaces**: drives herdr's socket API directly over SSH

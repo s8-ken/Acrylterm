@@ -6,6 +6,31 @@ Acrylterm（アクリルターム）は、自分の Mac や Linux マシンに S
 
 ホスト側で [herdr](docs/herdr-api.md) を使うと、タブやペイン、ワークスペースをアプリの機能として操作できます。Claude Code や Codex などの AI エージェントが入力待ちになると通知され、その場で返信できます。
 
+## スクリーンショット
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/images/terminal-panes.png" alt="ペイン分割"></td>
+    <td width="33%"><img src="docs/images/agent-reply.png" alt="エージェントへの返信"></td>
+    <td width="33%"><img src="docs/images/tab-overview.png" alt="タブ一覧"></td>
+  </tr>
+  <tr>
+    <td><b>ペイン分割</b><br>herdr で分割したペインをそのまま表示する(上は git log、下は htop)</td>
+    <td><b>エージェントの入力待ち</b><br>Claude Code の質問に、下端の返信バーから答える</td>
+    <td><b>タブ一覧</b><br>ワークスペースで絞り込める。入力待ちのタブには印が付く</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/host-list.png" alt="ホスト一覧"></td>
+    <td><img src="docs/images/appearance.png" alt="外観の設定"></td>
+    <td><img src="docs/images/ssh-keys.png" alt="SSH 鍵"></td>
+  </tr>
+  <tr>
+    <td><b>ホスト一覧</b><br>接続中のセッションと、入力待ちの数を表示する</td>
+    <td><b>外観</b><br>色プロファイルと背景の透明度を選ぶ</td>
+    <td><b>SSH 鍵</b><br>鍵の生成・インポートと、公開鍵のコピー・共有</td>
+  </tr>
+</table>
+
 ## 主な機能
 
 - **タブ / ペイン / ワークスペース**:herdr のソケット API を SSH 経由で直接操作する
