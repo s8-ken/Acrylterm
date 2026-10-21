@@ -128,6 +128,9 @@ fun AppearanceScreen(onBack: () -> Unit, onLicenses: () -> Unit) {
                         SwitchRow(stringResource(R.string.settings_appearance_split_title), stringResource(R.string.settings_appearance_split_sub), appSettings.paneSplitEnabled) {
                             app.settings.setPaneSplitEnabled(it)
                         }
+                        SwitchRow(stringResource(R.string.settings_appearance_fs_keys_title), stringResource(R.string.settings_appearance_fs_keys_sub), appSettings.fullscreenControls) {
+                            app.settings.setFullscreenControls(it)
+                        }
                     }
                     // Android 13+ has a per-app language page (fed by res/xml/locales_config.xml); older versions follow the system language.
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {

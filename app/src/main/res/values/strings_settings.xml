@@ -54,6 +54,8 @@
     <string name="settings_appearance_ext_sub">Add extra keys, commands and macros with Lua</string>
     <string name="settings_appearance_split_title">Pane splitting</string>
     <string name="settings_appearance_split_sub">Show “Split pane” in the ⋮ menu</string>
+    <string name="settings_appearance_fs_keys_title">Keys and reply box in fullscreen</string>
+    <string name="settings_appearance_fs_keys_sub">Keep them shown even with the keyboard closed</string>
     <string name="settings_appearance_role_background">Background</string>
     <string name="settings_appearance_role_accent">Accent</string>
     <string name="settings_appearance_role_text">Text</string>

@@ -545,8 +545,8 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
 
             // --- extra keys ---------------------------------------------------------------
             // Reading modTick makes the bar recompose when the sticky modifiers change.
-            // Fullscreen hides it only while the keyboard is down: typing on a phone needs these keys.
-            if (!fullscreen || imeVisible) ExtraKeysBar(
+            // Fullscreen hides it only while the keyboard is down (unless set to keep the controls): typing on a phone needs these keys.
+            if (!fullscreen || imeVisible || appSettings.fullscreenControls) ExtraKeysBar(
                 view = activeView,
                 ctrlOn = modTick >= 0 && modifiers.ctrl,
                 altOn = modTick >= 0 && modifiers.alt,
@@ -565,8 +565,10 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                 // Fullscreen drops the screen gutters; keep the keys off the display edges.
                 modifier = if (fullscreen) Modifier.padding(horizontal = 8.dp) else Modifier,
             )
-            if (!fullscreen) {
-                Row(Modifier.hideWhenIme(imeInsets).fillMaxWidth().clip(RoundedCornerShape(100.dp)).background(CyanVeil.Surface)
+            if (!fullscreen || appSettings.fullscreenControls) {
+                Row(Modifier.hideWhenIme(imeInsets).fillMaxWidth()
+                    .then(if (fullscreen) Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp) else Modifier) // off the bare display edges
+                    .clip(RoundedCornerShape(100.dp)).background(CyanVeil.Surface)
                     .clickable {
                         activeView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                         showComposer = true

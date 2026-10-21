@@ -11,6 +11,8 @@ data class AppSettings(
     val enabledTemplates: Set<String> = emptySet(),
     /** ⋮ メニューに「ペインを分割」を出す。ホスト側で分割済みのタブは、オフでも分割のまま表示する。 */
     val paneSplitEnabled: Boolean = false,
+    /** 全画面でキーボードを閉じていても補助キーと返信欄を出す(オフなら補助キーはキーボード表示中だけ、返信欄は出さない)。 */
+    val fullscreenControls: Boolean = false,
 )
 
 /** App-wide feature switches; changes are saved immediately. */
@@ -27,6 +29,7 @@ class AppSettingsRepository(context: Context, defaultExtensionsEnabled: () -> Bo
             preferences.getBoolean(KEY_EXTENSIONS, false),
             preferences.getStringSet(KEY_TEMPLATES, null)?.toSet() ?: emptySet(),
             preferences.getBoolean(KEY_PANE_SPLIT, false),
+            preferences.getBoolean(KEY_FULLSCREEN_CONTROLS, false),
         ))
     }
 
@@ -44,6 +47,11 @@ class AppSettingsRepository(context: Context, defaultExtensionsEnabled: () -> Bo
         mutableSettings.value = mutableSettings.value.copy(paneSplitEnabled = enabled)
     }
 
+    fun setFullscreenControls(enabled: Boolean) {
+        preferences.edit().putBoolean(KEY_FULLSCREEN_CONTROLS, enabled).apply()
+        mutableSettings.value = mutableSettings.value.copy(fullscreenControls = enabled)
+    }
+
     val enabledTemplates: Set<String> get() = settings.value.enabledTemplates
 
     fun setTemplateEnabled(fileName: String, enabled: Boolean) {
@@ -58,5 +66,6 @@ class AppSettingsRepository(context: Context, defaultExtensionsEnabled: () -> Bo
         const val KEY_EXTENSIONS = "extensions_enabled"
         const val KEY_TEMPLATES = "enabled_templates"
         const val KEY_PANE_SPLIT = "pane_split_enabled"
+        const val KEY_FULLSCREEN_CONTROLS = "fullscreen_controls"
     }
 }

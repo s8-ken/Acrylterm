@@ -54,6 +54,8 @@
     <string name="settings_appearance_ext_sub">補助キー・コマンド・マクロを Lua で追加</string>
     <string name="settings_appearance_split_title">ペイン分割</string>
     <string name="settings_appearance_split_sub">⋮ メニューに「ペインを分割」を表示</string>
+    <string name="settings_appearance_fs_keys_title">全画面でも補助キーと返信欄を表示</string>
+    <string name="settings_appearance_fs_keys_sub">キーボードを閉じていても出したままにする</string>
     <string name="settings_appearance_role_background">背景</string>
     <string name="settings_appearance_role_accent">アクセント</string>
     <string name="settings_appearance_role_text">文字</string>
