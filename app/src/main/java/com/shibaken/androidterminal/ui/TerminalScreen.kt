@@ -352,7 +352,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                             Item(stringResource(R.string.term_sessions), Icons.Filled.Dns) { showSessionPicker = true; session.refreshHerdrSessions() }
                             Item(stringResource(R.string.term_workspaces), Icons.Filled.Menu) { scope.launch { drawerState.open() } }
                             Item(stringResource(R.string.term_tabs), Icons.Filled.GridView) { showOverview = true }
-                            if (isPanes && focusedPaneId != null) {
+                            if (isPanes && focusedPaneId != null && appSettings.paneSplitEnabled) {
                                 Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.AutoMirrored.Filled.ViewQuilt, null, tint = tint)
                                     Text(stringResource(R.string.term_split_pane), Modifier.weight(1f).padding(start = 12.dp), style = MaterialTheme.typography.bodyLarge)

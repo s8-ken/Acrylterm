@@ -9,6 +9,8 @@ data class AppSettings(
     val extensionsEnabled: Boolean = false,
     /** 有効にした同梱テンプレートのファイル名(アプリ全体、既定は空 = すべて off)。 */
     val enabledTemplates: Set<String> = emptySet(),
+    /** ⋮ メニューに「ペインを分割」を出す。ホスト側で分割済みのタブは、オフでも分割のまま表示する。 */
+    val paneSplitEnabled: Boolean = false,
 )
 
 /** App-wide feature switches; changes are saved immediately. */
@@ -24,6 +26,7 @@ class AppSettingsRepository(context: Context, defaultExtensionsEnabled: () -> Bo
         mutableSettings = MutableStateFlow(AppSettings(
             preferences.getBoolean(KEY_EXTENSIONS, false),
             preferences.getStringSet(KEY_TEMPLATES, null)?.toSet() ?: emptySet(),
+            preferences.getBoolean(KEY_PANE_SPLIT, false),
         ))
     }
 
@@ -34,6 +37,11 @@ class AppSettingsRepository(context: Context, defaultExtensionsEnabled: () -> Bo
     fun setExtensionsEnabled(enabled: Boolean) {
         preferences.edit().putBoolean(KEY_EXTENSIONS, enabled).apply()
         mutableSettings.value = mutableSettings.value.copy(extensionsEnabled = enabled)
+    }
+
+    fun setPaneSplitEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean(KEY_PANE_SPLIT, enabled).apply()
+        mutableSettings.value = mutableSettings.value.copy(paneSplitEnabled = enabled)
     }
 
     val enabledTemplates: Set<String> get() = settings.value.enabledTemplates
@@ -49,5 +57,6 @@ class AppSettingsRepository(context: Context, defaultExtensionsEnabled: () -> Bo
     private companion object {
         const val KEY_EXTENSIONS = "extensions_enabled"
         const val KEY_TEMPLATES = "enabled_templates"
+        const val KEY_PANE_SPLIT = "pane_split_enabled"
     }
 }

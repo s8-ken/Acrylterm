@@ -72,20 +72,6 @@ class PaneUiLogicTest {
         assertEquals("1. Yes", adjacent[1].description)
     }
 
-    // --- narrow fallback ---
-    @Test fun narrowFallback() {
-        val half = listOf(FractionRect(0f, 0f, 0.5f, 1f), FractionRect(0.5f, 0f, 0.5f, 1f))
-        // 1080px wide, 20px cells => 27 columns each: too narrow
-        assertTrue(PaneLogic.needsSingleMode(half, 1080f, 20f))
-        // 2400px => 60 columns each: fine
-        assertFalse(PaneLogic.needsSingleMode(half, 2400f, 20f))
-        assertFalse(PaneLogic.needsSingleMode(listOf(FractionRect(0f, 0f, 1f, 1f)), 300f, 20f))
-        assertFalse(PaneLogic.needsSingleMode(half, 1080f, 0f))
-        // stacked panes keep full width
-        val stacked = listOf(FractionRect(0f, 0f, 1f, 0.5f), FractionRect(0f, 0.5f, 1f, 0.5f))
-        assertFalse(PaneLogic.needsSingleMode(stacked, 1080f, 10f))
-    }
-
     // --- two-finger swipe ---
     @Test fun twoFingerSwipeClassification() {
         assertEquals(1, PaneGestureMath.twoFingerSwipe(-200f, 10f, 300f, 310f, 100f))
@@ -93,25 +79,6 @@ class PaneUiLogicTest {
         assertEquals(0, PaneGestureMath.twoFingerSwipe(50f, 0f, 300f, 300f, 100f)) // too short
         assertEquals(0, PaneGestureMath.twoFingerSwipe(-200f, 150f, 300f, 300f, 100f)) // diagonal
         assertEquals(0, PaneGestureMath.twoFingerSwipe(-200f, 0f, 300f, 600f, 100f)) // pinch out
-    }
-
-    // --- one-finger pane swipe ---
-    @Test fun oneFingerPaneSwipeClassification() {
-        assertEquals(1, PaneGestureMath.oneFingerPaneSwipe(-200f, 10f, 100f))
-        assertEquals(-1, PaneGestureMath.oneFingerPaneSwipe(200f, -20f, 100f))
-        assertEquals(0, PaneGestureMath.oneFingerPaneSwipe(50f, 0f, 100f)) // too short
-        assertEquals(0, PaneGestureMath.oneFingerPaneSwipe(-200f, 150f, 100f)) // mostly vertical
-    }
-
-    // --- pane order ---
-    @Test fun paneOrderIsReadingOrder() {
-        val rects = mapOf(
-            "br" to FractionRect(0.5f, 0.5f, 0.5f, 0.5f),
-            "tl" to FractionRect(0f, 0f, 0.5f, 0.5f),
-            "bl" to FractionRect(0f, 0.5f, 0.5f, 0.5f),
-            "tr" to FractionRect(0.5f, 0f, 0.5f, 0.5f),
-        )
-        assertEquals(listOf("tl", "tr", "bl", "br"), PaneLogic.paneOrder(rects))
     }
 
     // --- divider math ---

@@ -49,7 +49,7 @@ import kotlin.math.roundToInt
  *  - tap            → left click (focus a pane, click a tab, …)
  *  - vertical drag  → mouse wheel
  * In [paneMode] (multi-pane screen) a double tap toggles zoom, a two-finger horizontal swipe switches
- * tabs and (single-pane layout only, [onPaneSwipe]) a one-finger horizontal swipe switches panes.
+ * tabs.
  * Without mouse tracking: drag scrolls the local scrollback (or sends arrow keys in the
  * alternate screen), tap shows the keyboard.
  * In every mode (local text selection, like a normal phone text UI):
@@ -132,8 +132,6 @@ class TerminalCanvasView @JvmOverloads constructor(
     var onDoubleTap: (() -> Unit)? = null
     /** Two-finger horizontal swipe: -1 = previous tab, +1 = next tab. */
     var onTwoFingerSwipe: ((Int) -> Unit)? = null
-    /** One-finger horizontal swipe: -1 = previous pane, +1 = next pane. Set only while panes are paged (single mode). */
-    var onPaneSwipe: ((Int) -> Unit)? = null
 
     /**
      * Panes mode: fetches the pane's recent output (ANSI, [HistoryMath.FETCH_LINES] lines) from the host and
@@ -561,10 +559,6 @@ class TerminalCanvasView @JvmOverloads constructor(
 
     // --- touch -------------------------------------------------------------------------
 
-    private var paneSwipeStartX = 0f
-    private var paneSwipeStartY = 0f
-    private var paneSwipeActive = false // one-finger gesture that may still turn into a pane swipe
-    private var paneSwipeFired = false
     private var swipeStartDist = 0f
     private var swipeStartX = 0f
     private var swipeStartY = 0f
@@ -940,13 +934,13 @@ class TerminalCanvasView @JvmOverloads constructor(
         }
 
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, dx: Float, dy: Float): Boolean {
-            if (scaling || paneSwipeFired) return true
+            if (scaling) return true
             scrollByPx(dy, e2.x, e2.y, MAX_DRAG_ROWS)
             return true
         }
 
         override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
-            if (scaling || paneSwipeFired || abs(vy) < abs(vx)) return false
+            if (scaling || abs(vy) < abs(vx)) return false
             if (session?.emulator == null) return false
             flingX = e2.x; flingY = e2.y
             startFling(FlingDecay(-vy))
@@ -995,35 +989,12 @@ class TerminalCanvasView @JvmOverloads constructor(
         if (handleSelectionTouch(event)) return true
         scaleDetector.onTouchEvent(event)
         trackTwoFingerSwipe(event)
-        trackPaneSwipe(event)
         if (!scaleDetector.isInProgress) gestures.onTouchEvent(event)
         if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
             scaling = false
             if (fling == null) endScrollGesture()
         }
         return true
-    }
-
-    /** Detects a one-finger horizontal swipe (pane paging) and reports it once per gesture. */
-    private fun trackPaneSwipe(event: MotionEvent) {
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                paneSwipeStartX = event.x
-                paneSwipeStartY = event.y
-                paneSwipeActive = onPaneSwipe != null
-                paneSwipeFired = false
-            }
-            MotionEvent.ACTION_POINTER_DOWN -> paneSwipeActive = false // multi-touch: pinch / tab swipe
-            MotionEvent.ACTION_MOVE -> if (paneSwipeActive && !paneSwipeFired && event.pointerCount == 1) {
-                val dir = PaneGestureMath.oneFingerPaneSwipe(event.x - paneSwipeStartX, event.y - paneSwipeStartY, swipeThresholdPx)
-                if (dir != 0) {
-                    paneSwipeFired = true
-                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    onPaneSwipe?.invoke(dir)
-                }
-            }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> paneSwipeActive = false
-        }
     }
 
     /** Detects a parallel two-finger horizontal swipe (distinct from pinch) and reports it once per gesture. */
@@ -1121,7 +1092,6 @@ class TerminalCanvasView @JvmOverloads constructor(
         selActive = true
         selDragging = true
         selHandle = 0
-        paneSwipeActive = false
         scaling = false
         wheelAcc.reset()
         finishActionMode()

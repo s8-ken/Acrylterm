@@ -15,13 +15,4 @@ object PaneGestureMath {
         return if (dx < 0) 1 else -1
     }
 
-    /**
-     * One-finger gesture in single-pane mode: -1 = previous pane (swipe right), +1 = next pane (swipe left),
-     * 0 = not a pane swipe. [dx]/[dy] are the finger movement since touch-down.
-     */
-    fun oneFingerPaneSwipe(dx: Float, dy: Float, thresholdPx: Float): Int {
-        if (abs(dx) < thresholdPx) return 0
-        if (abs(dx) < 2f * abs(dy)) return 0 // must be mostly horizontal (vertical = scroll)
-        return if (dx < 0) 1 else -1
-    }
 }

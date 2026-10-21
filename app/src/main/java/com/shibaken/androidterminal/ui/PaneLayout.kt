@@ -140,9 +140,8 @@ class PaneViewPool(
 private val FULL = FractionRect(0f, 0f, 1f, 1f)
 
 /**
- * The focused tab's panes, placed by herdr's layout fractions. Falls back to the focused pane alone when the
- * tab is zoomed or a pane would get fewer than [PaneLogic.MIN_COLS] columns; then a one-finger horizontal
- * swipe pages through the tab's panes.
+ * The focused tab's panes, placed by herdr's layout fractions within the visible area, however narrow they get.
+ * Only a zoomed tab shows the focused pane alone.
  */
 @Composable
 fun PaneLayout(
@@ -175,11 +174,7 @@ fun PaneLayout(
         val totalH = constraints.maxHeight.toFloat()
         val baseRects = layout?.normalizedPaneRects().orEmpty()
         val single = focusedId == null || layout == null || layout.zoomed || baseRects.size <= 1 ||
-            focusedId !in baseRects || PaneLogic.needsSingleMode(baseRects.values, totalW, pool.cellWidthPx())
-
-        val order = PaneLogic.paneOrder(baseRects)
-        val pageSwipe = single && layout?.zoomed == false && order.size >= 2 && focusedId in order
-        val pageIndex = order.indexOf(focusedId)
+            focusedId !in baseRects
 
         val geoms = layout?.splits?.map { SplitGeom(layout.normalize(it.rect), it.direction == "right", it.ratio) }.orEmpty()
         fun effective(r: FractionRect): FractionRect {
@@ -220,9 +215,6 @@ fun PaneLayout(
                     onFocus = { herdr.focusPane(id) },
                     onDoubleTap = { herdr.toggleZoom(id) },
                     onSwipe = { herdr.focusTabRelative(it) },
-                    onPaneSwipe = if (pageSwipe && id == focusedId) { dir ->
-                        order.getOrNull((pageIndex + dir).coerceIn(0, order.size - 1))?.let { if (it != id) herdr.focusPane(it) }
-                    } else null,
                     modifier = Modifier
                         .offset { IntOffset(left.roundToInt(), top.roundToInt()) }
                         .size(with(density) { w.toDp() }, with(density) { h.toDp() }),
@@ -250,20 +242,6 @@ fun PaneLayout(
             }
         }
 
-        if (pageSwipe) {
-            // Page dots: which pane of the tab is shown.
-            Row(
-                Modifier.align(Alignment.TopCenter).padding(top = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                order.forEachIndexed { i, _ ->
-                    Box(
-                        Modifier.size(if (i == pageIndex) 7.dp else 5.dp).align(Alignment.CenterVertically)
-                            .background(Color.White.copy(alpha = if (i == pageIndex) 0.8f else 0.35f), CircleShape),
-                    )
-                }
-            }
-        }
         if (layout?.zoomed == true && focusedId != null) {
             IconButton(
                 onClick = { herdr.toggleZoom(focusedId) },
@@ -289,7 +267,6 @@ private fun PaneItem(
     onFocus: () -> Unit,
     onDoubleTap: () -> Unit,
     onSwipe: (Int) -> Unit,
-    onPaneSwipe: ((Int) -> Unit)?,
     modifier: Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -310,7 +287,6 @@ private fun PaneItem(
             view.exitHistory()
             view.session = null
             view.onFocusRequest = null; view.onDoubleTap = null; view.onTwoFingerSwipe = null
-            view.onPaneSwipe = null
         }
     }
     val active = focused && inputEnabled
@@ -337,7 +313,6 @@ private fun PaneItem(
                 v.onFocusRequest = onFocus
                 v.onDoubleTap = onDoubleTap
                 v.onTwoFingerSwipe = onSwipe
-                v.onPaneSwipe = onPaneSwipe
             },
         )
         if (focused && blocked) {

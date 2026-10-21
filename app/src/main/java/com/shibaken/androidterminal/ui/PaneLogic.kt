@@ -5,27 +5,15 @@ import com.shibaken.androidterminal.herdr.LayoutSplit
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
-import kotlin.math.roundToInt
 
 /** Geometry of one split in 0..1 fractions of the tab area. [sideBySide] = children are left/right. */
 data class SplitGeom(val rect: FractionRect, val sideBySide: Boolean, val ratio: Float)
 
 /** Pure helpers for the multi-pane screen (kept free of Android types so they are unit-testable). */
 object PaneLogic {
-    const val MIN_COLS = 40
     const val MIN_RATIO = 0.1f
     const val MAX_RATIO = 0.9f
     private const val EPS = 0.002f
-
-    /** True when at least one pane would get fewer than [minCols] columns, so only the focused pane should be shown. */
-    fun needsSingleMode(rects: Collection<FractionRect>, totalWidthPx: Float, cellWidthPx: Float, minCols: Int = MIN_COLS): Boolean {
-        if (rects.size <= 1 || totalWidthPx <= 0f || cellWidthPx <= 0f) return false
-        return rects.any { it.width * totalWidthPx / cellWidthPx < minCols }
-    }
-
-    /** Pane ids in reading order of their layout rects: top to bottom, then left to right. */
-    fun paneOrder(rects: Map<String, FractionRect>): List<String> =
-        rects.entries.sortedWith(compareBy({ (it.value.y / EPS).roundToInt() }, { it.value.x })).map { it.key }
 
     /**
      * Maps [r] (which must lie inside [split]) after the split's divider moved from [oldRatio] to [newRatio].
