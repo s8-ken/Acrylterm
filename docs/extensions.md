@@ -68,7 +68,7 @@ UI の見た目のカスタマイズは対象外。PC 側にインストール�
 - 使えるもの: base、`table`、`string`(`dump` なし)、`math`、`bit32`、`os.time/os.clock/os.date`。`load` は文字列チャンクのみ。
 - 使えないもの: `io`、`require`/`package`、`dofile`/`loadfile`、`debug`、`coroutine`、`luajava`、`os` のその他。`getmetatable("")` は nil。
 - 暴走対策: 1 回のコールバック(読み込み含む)につき命令数 5,000,000 / 実時間 10 秒(`ssh.exec` 等のブロッキング時間は除く)。超えると以後の全命令でエラーになり、`pcall` では止められない。
-- `string.find/match/gmatch/gsub` は対象文字列が 32KB を超えると Lua エラー(`subject too long`)。パターンに `-` か `*` を含む場合は 16KB まで。ネイティブ実行で命令数制限が効かないための措置。
+- `string.find/match/gmatch/gsub` は対象文字列が 32KB を超えると Lua エラー(`subject too long`)。パターンに `-` か `*` を含む場合は 16KB まで。パターン自体は 4KB まで(`pattern too long`)。照合中も実行時間の上限が効き、超えると `time limit exceeded` で止まる。
 - 文字列は `..`・`string.rep`・`string.format`・`table.concat` のどれでも 1MB まで(`string too long`)。`string.format` の幅・精度は 1000 まで。
 - メモリ: ヒープ使用量が最大ヒープの約 60% を超えると `memory limit exceeded` で中断する(ベストエフォート)。`string.rep` は結果 1MB まで。
 - 正規表現(`term.on_output`/`quick_reply.rule`)の照合には時間制限があり(出力 1 行 50ms、クイック返信 200ms)、超えたら不一致扱いで `log` に 1 度だけ記録する。照合は Lua スレッド/バックグラウンドで行いメイン UI を塞がない。

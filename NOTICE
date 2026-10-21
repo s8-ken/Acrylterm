@@ -12,3 +12,7 @@ The terminal-emulator module contains modified source code from Termux
 libraries are based on "Terminal Emulator for Android" by Jack Palevich
 (https://github.com/jackpal/Android-Terminal-Emulator). Both are licensed under the
 Apache License, Version 2.0. See terminal-emulator/NOTICE.
+
+app/src/main/java/com/shibaken/androidterminal/ext/LuaPatterns.java contains modified source code
+from LuaJ 3.0.1 (org.luaj.vm2.lib.StringLib), Copyright (c) 2009-2011 Luaj.org, licensed under
+the MIT License (the license header is kept in that file).
