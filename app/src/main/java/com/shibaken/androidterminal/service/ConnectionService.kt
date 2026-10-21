@@ -38,9 +38,9 @@ class ConnectionService : Service() {
         )
         val n = NotificationCompat.Builder(this, App.CHANNEL_SESSION)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("${count} 件の SSH セッションに接続中")
+            .setContentTitle(resources.getQuantityString(R.plurals.core_fg_sessions, count, count))
             .setContentIntent(open)
-            .addAction(0, "すべて切断", disconnect)
+            .addAction(0, getString(R.string.core_disconnect_all), disconnect)
             .setOngoing(true)
             .build()
         val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0

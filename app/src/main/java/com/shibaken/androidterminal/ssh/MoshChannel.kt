@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.ssh
 
+import com.shibaken.androidterminal.R
+import com.shibaken.androidterminal.App
 import android.util.Log
 import java.io.IOException
 import java.io.InputStream
@@ -103,7 +105,7 @@ class MoshChannel private constructor(
             try {
                 MoshBridge.resize(h, cols, rows)
                 val first = MoshBridge.recv(h, FIRST_DATA_TIMEOUT_MS)
-                if (first.isEmpty()) throw IOException("Mosh: サーバーから応答がありません (UDP がブロックされている可能性)")
+                if (first.isEmpty()) throw IOException(App.str(R.string.core_mosh_no_reply))
                 return MoshChannel(h, cols, rows, first, info.pid, killServer)
             } catch (e: Exception) {
                 MoshBridge.close(h)

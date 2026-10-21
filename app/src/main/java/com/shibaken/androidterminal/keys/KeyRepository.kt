@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.keys
 
+import com.shibaken.androidterminal.R
+import com.shibaken.androidterminal.App
 import android.content.Context
 import android.os.Build
 import com.shibaken.androidterminal.data.JsonListStore
@@ -57,15 +59,15 @@ class KeyRepository(private val context: Context) {
                 .also { it.public } // forces parsing/decryption
         } catch (e: Exception) {
             throw IllegalArgumentException(
-                if (passphrase == null || passphrase.isEmpty()) "鍵を読み込めませんでした。パスフレーズ付きの鍵なら入力してください。(${e.message})"
-                else "鍵を読み込めませんでした。パスフレーズを確認してください。(${e.message})",
+                if (passphrase == null || passphrase.isEmpty()) App.str(R.string.core_key_load_failed_passphrase, e.message.toString())
+                else App.str(R.string.core_key_load_failed_check, e.message.toString()),
                 e,
             )
         }
         val (_, publicLine, fp) = SshKeys.describe(provider, name)
         val hasPass = passphrase != null && passphrase.isNotEmpty()
         val entry = SshKeyEntry(
-            name = name.ifBlank { "インポートした鍵" },
+            name = name.ifBlank { App.str(R.string.core_key_imported_name) },
             type = KeyType.IMPORTED,
             publicKey = publicLine,
             fingerprint = fp,
@@ -101,7 +103,7 @@ class KeyRepository(private val context: Context) {
     /** Loads the key for authentication. [passphrase] overrides the saved one. */
     suspend fun keyProvider(id: String, passphrase: CharArray?): KeyProvider = withContext(Dispatchers.Default) {
         val f = keyFile(id)
-        require(f.exists()) { "秘密鍵ファイルが見つかりません" }
+        require(f.exists()) { App.str(R.string.core_key_file_missing) }
         val text = String(KeystoreCipher.decrypt(f.readBytes()))
         val pass = passphrase ?: savedPassphrase(id)
         SshKeys.loadKeyProvider(text, pass).also { it.public }

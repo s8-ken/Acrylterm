@@ -18,6 +18,8 @@ class ExtEngine(
     /** タイマーの下限(秒)。テストで短縮するための差し替え口。 */
     private val minAfterSec: Double = TimerSet.MIN_AFTER_SEC,
     private val minEverySec: Double = TimerSet.MIN_EVERY_SEC,
+    /** Formats the user-visible toast for a callback error (the session injects a localized one). */
+    private val errorToast: (String) -> String = { "Extension error: $it" },
 ) {
     private class Loaded(val regs: Registrations, val api: ExtApi, val globals: org.luaj.vm2.Globals, val timers: TimerSet)
 
@@ -180,7 +182,7 @@ class ExtEngine(
             val msg = LuaRuntime.formatError(t)
             try {
                 host.log("error in $what: $msg")
-                host.toast("拡張エラー: ${msg.take(120)}")
+                host.toast(errorToast(msg.take(120)))
             } catch (_: Throwable) {
             }
             return false

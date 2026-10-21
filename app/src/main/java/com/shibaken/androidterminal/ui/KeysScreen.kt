@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.ui
 
+import androidx.compose.ui.res.stringResource
+import com.shibaken.androidterminal.R
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -78,17 +80,17 @@ fun KeysScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("SSH 鍵") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "戻る") } },
+                title = { Text(stringResource(R.string.settings_keys_title)) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.settings_back)) } },
             )
         },
         floatingActionButton = {
             Column(horizontalAlignment = Alignment.End) {
                 DropdownMenu(menu, { menu = false }) {
-                    DropdownMenuItem(text = { Text("新しい鍵を生成") }, onClick = { menu = false; showGenerate = true })
-                    DropdownMenuItem(text = { Text("既存の鍵をインポート") }, onClick = { menu = false; showImport = true })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.settings_keys_generate_new)) }, onClick = { menu = false; showGenerate = true })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.settings_keys_import_existing)) }, onClick = { menu = false; showImport = true })
                 }
-                FloatingActionButton(onClick = { menu = true }) { Icon(Icons.Filled.Add, "追加") }
+                FloatingActionButton(onClick = { menu = true }) { Icon(Icons.Filled.Add, stringResource(R.string.settings_keys_add)) }
             }
         },
     ) { padding ->
@@ -99,7 +101,7 @@ fun KeysScreen(onBack: () -> Unit) {
         ) {
             item {
                 Text(
-                    "公開鍵を Mac の ~/.ssh/authorized_keys に追記すると、その鍵でログインできます。秘密鍵は Android Keystore で暗号化して端末内に保存されます。",
+                    stringResource(R.string.settings_keys_intro),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -110,11 +112,11 @@ fun KeysScreen(onBack: () -> Unit) {
                     onCopy = {
                         val cm = context.getSystemService(ClipboardManager::class.java)
                         cm.setPrimaryClip(ClipData.newPlainText("ssh public key", k.publicKey))
-                        Toast.makeText(context, "公開鍵をコピーしました", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.settings_keys_copied), Toast.LENGTH_SHORT).show()
                     },
                     onShare = {
                         val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, k.publicKey)
-                        context.startActivity(Intent.createChooser(send, "公開鍵を共有"))
+                        context.startActivity(Intent.createChooser(send, context.getString(R.string.settings_keys_share_chooser)))
                     },
                     onBiometric = { app.keys.setRequireBiometric(k.id, it) },
                     onDelete = { deleting = k },
@@ -128,16 +130,16 @@ fun KeysScreen(onBack: () -> Unit) {
     deleting?.let { k ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text("鍵を削除") },
-            text = { Text("「${k.name}」を削除します。この鍵を使っているホストは鍵の再設定が必要になります。元に戻せません。") },
+            title = { Text(stringResource(R.string.settings_keys_delete_title)) },
+            text = { Text(stringResource(R.string.settings_keys_delete_message, k.name)) },
             confirmButton = {
                 TextButton(onClick = {
                     app.keys.delete(k.id)
                     app.hosts.clearKeyReferences(k.id)
                     deleting = null
-                }) { Text("削除") }
+                }) { Text(stringResource(R.string.settings_delete)) }
             },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("キャンセル") } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.settings_cancel)) } },
         )
     }
 }
@@ -156,14 +158,14 @@ private fun KeyCard(
                 Column(Modifier.weight(1f)) {
                     Text(k.name, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        k.type.label + if (k.hasPassphrase) " · パスフレーズ付き" else "",
+                        k.type.label + if (k.hasPassphrase) " · " + stringResource(R.string.settings_keys_with_passphrase) else "",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = onCopy) { Icon(Icons.Filled.ContentCopy, "公開鍵をコピー") }
-                IconButton(onClick = onShare) { Icon(Icons.Filled.Share, "共有") }
-                IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, "削除") }
+                IconButton(onClick = onCopy) { Icon(Icons.Filled.ContentCopy, stringResource(R.string.settings_keys_copy_public)) }
+                IconButton(onClick = onShare) { Icon(Icons.Filled.Share, stringResource(R.string.settings_keys_share)) }
+                IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, stringResource(R.string.settings_delete)) }
             }
             Text(k.fingerprint, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
             Text(
@@ -176,7 +178,7 @@ private fun KeyCard(
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(k.requireBiometric, onBiometric)
-                Text("使用時に生体認証/画面ロックを要求", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.settings_keys_require_biometric), style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -193,16 +195,16 @@ private fun GenerateDialog(onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
-        title = { Text("鍵を生成") },
+        title = { Text(stringResource(R.string.settings_keys_generate_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("名前") }, singleLine = true)
+                OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.settings_keys_name)) }, singleLine = true)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(KeyType.ED25519, KeyType.RSA_4096).forEach { t ->
                         FilterChip(type == t, { type = t }, label = { Text(t.label) })
                     }
                 }
-                Text("特別な理由がなければ Ed25519 がおすすめです。", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.settings_keys_ed25519_hint), style = MaterialTheme.typography.bodySmall)
                 if (busy) CircularProgressIndicator()
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
@@ -220,9 +222,9 @@ private fun GenerateDialog(onDismiss: () -> Unit) {
                         busy = false
                     }
                 }
-            }) { Text("生成") }
+            }) { Text(stringResource(R.string.settings_keys_generate)) }
         },
-        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("キャンセル") } },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(stringResource(R.string.settings_cancel)) } },
     )
 }
 
@@ -249,31 +251,31 @@ private fun ImportDialog(onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
-        title = { Text("鍵をインポート") },
+        title = { Text(stringResource(R.string.settings_keys_import_title)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("名前") }, singleLine = true)
+                OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.settings_keys_name)) }, singleLine = true)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { picker.launch(arrayOf("*/*")) }) {
                         Icon(Icons.Filled.FileOpen, null)
-                        Text(" ファイルから選ぶ")
+                        Text(" " + stringResource(R.string.settings_keys_pick_file))
                     }
                 }
                 OutlinedTextField(
                     text, { text = it },
-                    label = { Text("秘密鍵(-----BEGIN ... を貼り付け)") },
+                    label = { Text(stringResource(R.string.settings_keys_private_key_label)) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
                     textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                 )
                 OutlinedTextField(
-                    passphrase, { passphrase = it }, label = { Text("パスフレーズ(あれば)") }, singleLine = true,
+                    passphrase, { passphrase = it }, label = { Text(stringResource(R.string.settings_keys_passphrase_label)) }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 )
                 if (passphrase.isNotEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(savePass, { savePass = it })
-                        Text("パスフレーズを保存する(暗号化)", style = MaterialTheme.typography.bodyMedium)
+                        Text(stringResource(R.string.settings_keys_save_passphrase), style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 if (busy) CircularProgressIndicator()
@@ -294,8 +296,8 @@ private fun ImportDialog(onDismiss: () -> Unit) {
                         busy = false
                     }
                 }
-            }) { Text("インポート") }
+            }) { Text(stringResource(R.string.settings_keys_import)) }
         },
-        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("キャンセル") } },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(stringResource(R.string.settings_cancel)) } },
     )
 }

@@ -1,5 +1,8 @@
 package com.shibaken.androidterminal.data
 
+import com.shibaken.androidterminal.R
+import com.shibaken.androidterminal.App
+import androidx.annotation.StringRes
 import kotlinx.serialization.Serializable
 import java.util.UUID
 
@@ -43,11 +46,13 @@ data class HostProfile(
 }
 
 @Serializable
-enum class KeyType(val label: String) {
+enum class KeyType(private val fixedLabel: String?, @StringRes private val labelRes: Int = 0) {
     ED25519("Ed25519"),
     ECDSA_P256("ECDSA (P-256)"),
     RSA_4096("RSA 4096"),
-    IMPORTED("インポート"),
+    IMPORTED(null, R.string.core_key_type_imported);
+
+    val label: String get() = fixedLabel ?: App.str(labelRes)
 }
 
 @Serializable

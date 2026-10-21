@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.herdr
 
+import com.shibaken.androidterminal.R
+import com.shibaken.androidterminal.App
 import com.shibaken.androidterminal.data.AppJson
 import com.shibaken.androidterminal.data.HostProfile
 import kotlinx.serialization.Serializable
@@ -30,9 +32,9 @@ data class HerdrSessionPickerState(
 fun parseHerdrSessions(json: String): List<HerdrSessionInfo> {
     val sessions = AppJson.decodeFromString(HerdrSessionList.serializer(), json).sessions
     require(sessions.all { it.name.matches(Regex("[A-Za-z0-9._-]{1,64}")) && it.name !in listOf(".", "..") && it.socketPath.startsWith("/") && '\u0000' !in it.socketPath }) {
-        "セッション一覧の形式が正しくありません"
+        App.str(R.string.core_herdr_sessions_bad_format)
     }
-    require(sessions.map { it.name }.distinct().size == sessions.size) { "セッション名が重複しています" }
+    require(sessions.map { it.name }.distinct().size == sessions.size) { App.str(R.string.core_herdr_sessions_duplicate) }
     return sessions
 }
 
@@ -48,11 +50,11 @@ suspend fun resolveRunningHerdrSession(name: String, list: suspend () -> List<He
     ping: suspend (HerdrSessionInfo) -> Unit): HerdrSessionInfo {
     try {
         val entry = list().firstOrNull { it.name == name && it.running }
-            ?: error("選択したセッションは稼働していません。一覧を更新してください。")
+            ?: error(App.str(R.string.core_herdr_session_not_running))
         ping(entry)
         return entry
     } catch (timeout: TimeoutCancellationException) {
         currentCoroutineContext().ensureActive()
-        throw IOException("セッションの応答がタイムアウトしました。再試行してください。", timeout)
+        throw IOException(App.str(R.string.core_herdr_session_timeout), timeout)
     }
 }

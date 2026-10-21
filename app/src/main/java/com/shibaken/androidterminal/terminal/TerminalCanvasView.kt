@@ -1,5 +1,6 @@
 package com.shibaken.androidterminal.terminal
 
+import com.shibaken.androidterminal.R
 import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -1276,9 +1277,9 @@ class TerminalCanvasView @JvmOverloads constructor(
 
     private val selectionCallback = object : ActionMode.Callback2() {
         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
-            menu.add(Menu.NONE, MENU_COPY, 0, "コピー")
-            menu.add(Menu.NONE, MENU_PASTE, 1, "貼り付け")
-            menu.add(Menu.NONE, MENU_SELECT_ALL, 2, "すべて選択")
+            menu.add(Menu.NONE, MENU_COPY, 0, context.getString(R.string.term_copy))
+            menu.add(Menu.NONE, MENU_PASTE, 1, context.getString(R.string.term_paste))
+            menu.add(Menu.NONE, MENU_SELECT_ALL, 2, context.getString(R.string.term_select_all))
             return true
         }
 

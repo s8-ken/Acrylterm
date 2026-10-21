@@ -1,6 +1,8 @@
 package com.shibaken.androidterminal
 
 import android.app.Application
+import androidx.annotation.PluralsRes
+import androidx.annotation.StringRes
 import com.shibaken.androidterminal.data.AppSettingsRepository
 import com.shibaken.androidterminal.data.AppearanceRepository
 import com.shibaken.androidterminal.ui.CyanVeil
@@ -82,13 +84,13 @@ class App : Application() {
     private fun createNotificationChannels() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_SESSION, "接続中のセッション", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "SSH 接続をバックグラウンドで維持している間に表示されます"
+            NotificationChannel(CHANNEL_SESSION, getString(R.string.core_channel_session), NotificationManager.IMPORTANCE_LOW).apply {
+                description = getString(R.string.core_channel_session_desc)
             }
         )
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_AGENT, "エージェントの状態", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "エージェントが入力待ちや完了になったときに通知します"
+            NotificationChannel(CHANNEL_AGENT, getString(R.string.core_channel_agent), NotificationManager.IMPORTANCE_HIGH).apply {
+                description = getString(R.string.core_channel_agent_desc)
             }
         )
     }
@@ -99,5 +101,12 @@ class App : Application() {
 
         lateinit var instance: App
             private set
+
+        /** Resolve a string resource from non-UI code. Falls back to the resource id in JVM unit tests (no Application). */
+        fun str(@StringRes id: Int, vararg args: Any): String =
+            if (::instance.isInitialized) instance.getString(id, *args) else "string/$id"
+
+        fun plural(@PluralsRes id: Int, quantity: Int, vararg args: Any): String =
+            if (::instance.isInitialized) instance.resources.getQuantityString(id, quantity, *args) else "plural/$id"
     }
 }

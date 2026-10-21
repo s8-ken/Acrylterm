@@ -1,5 +1,8 @@
 package com.shibaken.androidterminal.herdr
 
+import com.shibaken.androidterminal.R
+import com.shibaken.androidterminal.App
+import androidx.annotation.StringRes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
@@ -36,7 +39,10 @@ internal suspend fun createWorkspaceWithInitialTab(label: String?, rpc: HerdrRpc
 enum class BulkCloseKind { TABS, WORKSPACES }
 
 data class BulkClosePlan(val kind: BulkCloseKind, val ids: List<String>, val workspaceCount: Int, val tabCount: Int, val paneCount: Int)
-data class BulkCloseFailure(val id: String, val reason: String)
+/** [message] is literal text; [messageRes] (when set) is resolved lazily so this stays pure in JVM tests. */
+data class BulkCloseFailure(val id: String, val message: String = "", @StringRes val messageRes: Int = 0) {
+    val reason: String get() = if (messageRes != 0) App.str(messageRes) else message
+}
 data class BulkCloseResult(val plan: BulkClosePlan, val completed: Int, val failures: List<BulkCloseFailure>)
 
 /** A confirmation captures IDs across every workspace, independent of the overview's display filter. */
@@ -64,16 +70,18 @@ internal suspend fun runBulkClose(plan: BulkClosePlan, alreadyClosingTabs: Set<S
             completed++
         } catch (error: TimeoutCancellationException) {
             currentCoroutineContext().ensureActive()
-            failures += BulkCloseFailure(id, "応答がタイムアウトしました。状態を確認して再試行してください。")
+            failures += BulkCloseFailure(id, messageRes = R.string.core_bulk_timeout)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
             val gone = error is HerdrException && (error.code == "workspace_not_found" ||
                 (plan.kind == BulkCloseKind.TABS && error.code == "tab_not_found"))
-            if (gone) completed++ else failures += BulkCloseFailure(id,
+            if (gone) completed++ else failures += error.message.orEmpty().lineSequence().firstOrNull().orEmpty().take(120).let { line ->
                 if (error is HerdrException && error.code == "workspace_group_close_required")
-                    "グループの終了確認が必要です。サーバー側でグループを確認してください。"
-                else error.message.orEmpty().lineSequence().firstOrNull().orEmpty().take(120).ifBlank { "終了に失敗しました" })
+                    BulkCloseFailure(id, messageRes = R.string.core_bulk_group_confirm)
+                else if (line.isBlank()) BulkCloseFailure(id, messageRes = R.string.core_bulk_close_failed)
+                else BulkCloseFailure(id, line)
+            }
         }
     }
     return BulkCloseResult(plan, completed, failures)

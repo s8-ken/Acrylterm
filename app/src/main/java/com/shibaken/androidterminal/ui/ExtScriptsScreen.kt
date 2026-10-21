@@ -1,6 +1,7 @@
 package com.shibaken.androidterminal.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -59,8 +60,8 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
     viewingTemplate?.let { file ->
         val t = app.extTemplates.firstOrNull { it.fileName == file }
         if (t == null) { viewingTemplate = null } else {
-            ScriptEditor("テンプレート / $file", t.source, onSave = {}, onCancel = { viewingTemplate = null }, readOnly = true,
-                extraAction = "コピーして編集" to {
+            ScriptEditor(stringResource(R.string.ext_template_title, file), t.source, onSave = {}, onCancel = { viewingTemplate = null }, readOnly = true,
+                extraAction = stringResource(R.string.ext_copy_and_edit) to {
                     val copy = ExtTemplates.copyName(file, store.listGlobal())
                     store.writeGlobal(copy, t.source)
                     // 二重に動かさないよう、コピー元のテンプレートは off にする。
@@ -95,7 +96,7 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
 
     VeilBackdrop(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 20.dp)) {
-            VeilPageHeader("拡張スクリプト", onBack, "操作を、自分の使いやすい形に。")
+            VeilPageHeader(stringResource(R.string.ext_scripts_title), onBack, stringResource(R.string.ext_scripts_subtitle))
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
@@ -105,21 +106,21 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
                                 Icon(Icons.Filled.Code, null, tint = CyanVeil.Cyan)
                             }
                             Column {
-                                Text("共通スクリプト", fontSize = 18.sp, fontWeight = FontWeight.Medium)
+                                Text(stringResource(R.string.ext_common_scripts), fontSize = 18.sp, fontWeight = FontWeight.Medium)
                                 Text("LUA EXTENSIONS", color = CyanVeil.Cyan, fontSize = 10.sp, letterSpacing = 1.sp)
                             }
                         }
-                        Text("マクロ・自動処理・返信候補をカスタマイズできます。", color = CyanVeil.Muted, fontSize = 13.sp)
-                        Text("ホスト設定で拡張を有効にすると、保存した内容が接続中のセッションにも反映されます。",
+                        Text(stringResource(R.string.ext_common_desc), color = CyanVeil.Muted, fontSize = 13.sp)
+                        Text(stringResource(R.string.ext_common_note_enable),
                             color = CyanVeil.Muted, fontSize = 11.sp)
-                        Text("ホスト別のスクリプトは「全体に取り込む」で共通にできます。", color = CyanVeil.Muted, fontSize = 11.sp)
+                        Text(stringResource(R.string.ext_common_note_import), color = CyanVeil.Muted, fontSize = 11.sp)
                     }
                 }
-                item { SectionHeading("保存済みスクリプト", "${names.size} 件", Modifier.padding(top = 4.dp)) }
+                item { SectionHeading(stringResource(R.string.ext_saved_scripts), countItems(context, names.size), Modifier.padding(top = 4.dp)) }
                 if (names.isEmpty()) item {
                     VeilCard(Modifier.fillMaxWidth()) {
-                        Text("最初のスクリプトを追加", fontWeight = FontWeight.Medium)
-                        Text("下のボタンから .lua ファイルを作成できます。", color = CyanVeil.Muted, fontSize = 13.sp)
+                        Text(stringResource(R.string.ext_add_first), fontWeight = FontWeight.Medium)
+                        Text(stringResource(R.string.ext_add_first_hint), color = CyanVeil.Muted, fontSize = 13.sp)
                     }
                 }
                 items(names, key = { it }) { name ->
@@ -132,21 +133,22 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
                                 Text(name, fontFamily = FontFamily.Monospace, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 val tags = remember(name, names) { store.readGlobal(name)?.let { ExtSummary.parse(it) } }
                                 if (tags != null) ExtTags(tags)
-                                Text("タップして編集", fontSize = 11.sp, color = CyanVeil.Muted)
+                                Text(stringResource(R.string.ext_tap_to_edit), fontSize = 11.sp, color = CyanVeil.Muted)
                             }
                             IconButton(onClick = { deleting = name }) {
-                                Icon(Icons.Filled.DeleteOutline, "$name を削除", tint = CyanVeil.Muted)
+                                Icon(Icons.Filled.DeleteOutline, stringResource(R.string.ext_delete_named, name), tint = CyanVeil.Muted)
                             }
                         }
                     }
                 }
-                item { SectionHeading("テンプレート", "${app.extTemplates.size} 件", Modifier.padding(top = 4.dp)) }
+                item { SectionHeading(stringResource(R.string.ext_templates), countItems(context, app.extTemplates.size), Modifier.padding(top = 4.dp)) }
                 item {
-                    Text("オンにすると拡張を有効にしたホストで動きます。コピーして自由に編集できます。",
+                    Text(stringResource(R.string.ext_templates_hint),
                         color = CyanVeil.Muted, fontSize = 11.sp)
                 }
                 items(app.extTemplates, key = { "t:${it.fileName}" }) { t ->
                     val on = t.fileName in appSettings.enabledTemplates
+                    val toggleDesc = stringResource(R.string.ext_toggle_named, t.fileName)
                     val tags = remember(t.fileName) { ExtSummary.parse(t.source) }
                     Surface(onClick = { viewingTemplate = t.fileName }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
                         color = CyanVeil.Surface, border = BorderStroke(1.dp, CyanVeil.Border)) {
@@ -162,12 +164,12 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
                             Switch(on, { v ->
                                 app.settings.setTemplateEnabled(t.fileName, v)
                                 app.sessions.reloadExtensions()
-                            }, modifier = Modifier.semantics { contentDescription = "${t.fileName} の有効/無効" })
+                            }, modifier = Modifier.semantics { contentDescription = toggleDesc })
                         }
                     }
                 }
                 for ((host, list) in hostScripts) {
-                    item(key = "hh:${host.id}") { SectionHeading("ホスト別 · ${host.displayName}", "${list.size} 件", Modifier.padding(top = 4.dp)) }
+                    item(key = "hh:${host.id}") { SectionHeading(stringResource(R.string.ext_host_section, host.displayName), countItems(context, list.size), Modifier.padding(top = 4.dp)) }
                     items(list, key = { "h:${host.id}/$it" }) { name ->
                         Surface(onClick = { viewing = "${host.id}/$name" }, modifier = Modifier.fillMaxWidth(),
                             shape = MaterialTheme.shapes.large, color = CyanVeil.Surface, border = BorderStroke(1.dp, CyanVeil.Border)) {
@@ -176,7 +178,7 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
                                 Icon(Icons.Filled.Code, null, tint = CyanVeil.Muted)
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(name, fontFamily = FontFamily.Monospace, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text("ホストから同期", fontSize = 11.sp, color = CyanVeil.Muted)
+                                    Text(stringResource(R.string.ext_synced_from_host), fontSize = 11.sp, color = CyanVeil.Muted)
                                 }
                                 IconButton(onClick = {
                                     val key = "${host.id}/$name"
@@ -184,10 +186,10 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
                                     else if (runCatching { store.importHostToGlobal(host.id, name) }.getOrDefault(false)) {
                                         names = store.listGlobal()
                                         app.sessions.reloadExtensions()
-                                        Toast.makeText(context, "$name を取り込みました", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, context.getString(R.string.ext_imported, name), Toast.LENGTH_SHORT).show()
                                     }
                                 }) {
-                                    Icon(Icons.Filled.Download, "$name を全体に取り込む", tint = CyanVeil.Cyan)
+                                    Icon(Icons.Filled.Download, stringResource(R.string.ext_import_to_global, name), tint = CyanVeil.Cyan)
                                 }
                             }
                         }
@@ -197,7 +199,7 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
             Button(onClick = { adding = true }, shape = CircleShape,
                 modifier = Modifier.align(Alignment.CenterHorizontally).padding(vertical = 16.dp).heightIn(min = 52.dp)) {
                 VeilIcon(R.drawable.veil_plus, null, CyanVeil.Ink)
-                Text("スクリプトを追加", Modifier.padding(start = 8.dp))
+                Text(stringResource(R.string.ext_add_script), Modifier.padding(start = 8.dp))
             }
         }
     }
@@ -206,10 +208,10 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
         var newName by rememberSaveable { mutableStateOf("") }
         val full = if (newName.endsWith(".lua")) newName else "$newName.lua"
         val valid = newName.isNotBlank() && ScriptStore.isValidName(full) && full !in names
-        AlertDialog(onDismissRequest = { adding = false }, title = { Text("新しいスクリプト") }, text = {
-            OutlinedTextField(newName, { newName = it.trim() }, singleLine = true, label = { Text("ファイル名") },
+        AlertDialog(onDismissRequest = { adding = false }, title = { Text(stringResource(R.string.ext_new_script)) }, text = {
+            OutlinedTextField(newName, { newName = it.trim() }, singleLine = true, label = { Text(stringResource(R.string.ext_file_name)) },
                 suffix = { if (!newName.endsWith(".lua")) Text(".lua") },
-                supportingText = { Text(if (full in names) "同じ名前のファイルがあります" else "半角英数字・ハイフン・アンダースコアを使用できます") },
+                supportingText = { Text(if (full in names) stringResource(R.string.ext_name_duplicate) else stringResource(R.string.ext_name_allowed)) },
                 isError = newName.isNotEmpty() && !valid, shape = MaterialTheme.shapes.medium,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii))
         }, confirmButton = {
@@ -218,8 +220,8 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
                 names = store.listGlobal()
                 adding = false
                 editing = full
-            }) { Text("作成") }
-        }, dismissButton = { TextButton(onClick = { adding = false }) { Text("キャンセル") } })
+            }) { Text(stringResource(R.string.ext_create)) }
+        }, dismissButton = { TextButton(onClick = { adding = false }) { Text(stringResource(R.string.ext_cancel)) } })
     }
     importing?.let { key ->
         val hostId = key.substringBefore('/')
@@ -232,37 +234,37 @@ fun ExtScriptsScreen(onBack: () -> Unit) {
             if (runCatching { store.importHostToGlobal(hostId, name, asName, overwrite) }.getOrDefault(false)) {
                 names = store.listGlobal()
                 app.sessions.reloadExtensions()
-                Toast.makeText(context, "$asName を取り込みました", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.ext_imported, asName), Toast.LENGTH_SHORT).show()
             }
             importing = null
         }
-        if (!renaming) AlertDialog(onDismissRequest = { importing = null }, title = { Text("同名のスクリプトがあります") },
-            text = { Text("$name は全体スクリプトに既にあります。") },
+        if (!renaming) AlertDialog(onDismissRequest = { importing = null }, title = { Text(stringResource(R.string.ext_conflict_title)) },
+            text = { Text(stringResource(R.string.ext_conflict_text, name)) },
             confirmButton = {
                 Row {
-                    TextButton(onClick = { newName = name.removeSuffix(".lua"); renaming = true }) { Text("別名で取り込む") }
-                    TextButton(onClick = { finish(name, true) }) { Text("上書き", color = CyanVeil.Rose) }
+                    TextButton(onClick = { newName = name.removeSuffix(".lua"); renaming = true }) { Text(stringResource(R.string.ext_import_renamed)) }
+                    TextButton(onClick = { finish(name, true) }) { Text(stringResource(R.string.ext_overwrite), color = CyanVeil.Rose) }
                 }
-            }, dismissButton = { TextButton(onClick = { importing = null }) { Text("キャンセル") } })
-        else AlertDialog(onDismissRequest = { importing = null }, title = { Text("別名で取り込む") }, text = {
-            OutlinedTextField(newName, { newName = it.trim() }, singleLine = true, label = { Text("ファイル名") },
+            }, dismissButton = { TextButton(onClick = { importing = null }) { Text(stringResource(R.string.ext_cancel)) } })
+        else AlertDialog(onDismissRequest = { importing = null }, title = { Text(stringResource(R.string.ext_import_renamed)) }, text = {
+            OutlinedTextField(newName, { newName = it.trim() }, singleLine = true, label = { Text(stringResource(R.string.ext_file_name)) },
                 suffix = { if (!newName.endsWith(".lua")) Text(".lua") },
-                supportingText = { Text(if (full in names) "同じ名前のファイルがあります" else "半角英数字・ハイフン・アンダースコアを使用できます") },
+                supportingText = { Text(if (full in names) stringResource(R.string.ext_name_duplicate) else stringResource(R.string.ext_name_allowed)) },
                 isError = newName.isNotEmpty() && !valid, shape = MaterialTheme.shapes.medium,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii))
-        }, confirmButton = { TextButton(enabled = valid, onClick = { finish(full, false) }) { Text("取り込む") } },
-            dismissButton = { TextButton(onClick = { importing = null }) { Text("キャンセル") } })
+        }, confirmButton = { TextButton(enabled = valid, onClick = { finish(full, false) }) { Text(stringResource(R.string.ext_import)) } },
+            dismissButton = { TextButton(onClick = { importing = null }) { Text(stringResource(R.string.ext_cancel)) } })
     }
     deleting?.let { name ->
-        AlertDialog(onDismissRequest = { deleting = null }, title = { Text("スクリプトを削除") },
-            text = { Text("$name を削除します。") }, confirmButton = {
+        AlertDialog(onDismissRequest = { deleting = null }, title = { Text(stringResource(R.string.ext_delete_script)) },
+            text = { Text(stringResource(R.string.ext_delete_script_text, name)) }, confirmButton = {
                 TextButton(onClick = {
                     store.deleteGlobal(name)
                     app.sessions.reloadExtensions()
                     names = store.listGlobal()
                     deleting = null
-                }) { Text("削除", color = CyanVeil.Rose) }
-            }, dismissButton = { TextButton(onClick = { deleting = null }) { Text("キャンセル") } })
+                }) { Text(stringResource(R.string.ext_delete), color = CyanVeil.Rose) }
+            }, dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.ext_cancel)) } })
     }
 }
 
@@ -277,35 +279,39 @@ private fun ScriptEditor(
     extraAction: Pair<String, () -> Unit>? = null,
 ) {
     var text by rememberSaveable(name) { mutableStateOf(initial) }
+    val lineCount = text.count { it == '\n' } + 1
     val background = CyanVeil.Background.copy(alpha = LocalAppearance.current.backgroundOpacity)
     BackHandler(onBack = onCancel)
     VeilBackdrop(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().systemBarsPadding().imePadding().padding(horizontal = 20.dp)) {
-            VeilPageHeader(if (readOnly) "スクリプトを表示" else "スクリプトを編集", onCancel, name)
+            VeilPageHeader(if (readOnly) stringResource(R.string.ext_view_script) else stringResource(R.string.ext_edit_script), onCancel, name)
             Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 StatusPill("LUA", CyanVeil.Cyan)
-                if (readOnly) Text("読み取り専用", fontSize = 11.sp, color = CyanVeil.Muted)
-                else Text(if (text != initial) "未保存の変更" else "保存済み", fontSize = 11.sp,
+                if (readOnly) Text(stringResource(R.string.ext_read_only), fontSize = 11.sp, color = CyanVeil.Muted)
+                else Text(if (text != initial) stringResource(R.string.ext_unsaved) else stringResource(R.string.ext_saved), fontSize = 11.sp,
                     color = if (text != initial) CyanVeil.Amber else CyanVeil.Muted)
             }
             OutlinedTextField(text, { text = it }, readOnly = readOnly, modifier = Modifier.weight(1f).fillMaxWidth(),
-                label = { Text("Lua スクリプト") }, shape = MaterialTheme.shapes.large,
+                label = { Text(stringResource(R.string.ext_lua_script_label)) }, shape = MaterialTheme.shapes.large,
                 textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 21.sp, color = CyanVeil.Text),
                 colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = background, unfocusedContainerColor = background,
                     focusedBorderColor = CyanVeil.Cyan, unfocusedBorderColor = CyanVeil.Border, cursorColor = CyanVeil.Cyan),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii))
             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("${text.count { it == '\n' } + 1} 行", fontSize = 11.sp, color = CyanVeil.Muted)
+                Text(LocalContext.current.resources.getQuantityString(R.plurals.ext_lines, lineCount, lineCount), fontSize = 11.sp, color = CyanVeil.Muted)
                 if (readOnly && extraAction != null) Button(onClick = extraAction.second, shape = CircleShape,
                     modifier = Modifier.heightIn(min = 48.dp)) {
                     Text(extraAction.first, Modifier.padding(horizontal = 8.dp))
                 }
                 if (!readOnly) Button(onClick = { onSave(text) }, shape = CircleShape, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text("保存して反映", Modifier.padding(horizontal = 8.dp))
+                    Text(stringResource(R.string.ext_save_apply), Modifier.padding(horizontal = 8.dp))
                 }
             }
         }
     }
 }
+
+private fun countItems(context: android.content.Context, n: Int): String =
+    context.resources.getQuantityString(R.plurals.ext_count_items, n, n)

@@ -47,6 +47,8 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 
 /** Chrome-like, stable two-column cards. Previews read output only and never focus or type into a pane. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -95,34 +97,37 @@ fun PaneOverview(state: HerdrState, herdr: HerdrController, onDismiss: () -> Uni
             Row(Modifier.fillMaxWidth().height(64.dp).background(CyanVeil.Background).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { herdr.newTab(workspace ?: state.focusedWorkspaceId); onDismiss() }, enabled = !busy, modifier = Modifier.height(48.dp)) {
                     VeilIcon(R.drawable.veil_plus, null)
-                    Text("新しいタブ", Modifier.padding(start = 8.dp), color = CyanVeil.Text, fontSize = 16.sp)
+                    Text(stringResource(R.string.herdrui_new_tab), Modifier.padding(start = 8.dp), color = CyanVeil.Text, fontSize = 16.sp)
                 }
                 Spacer(Modifier.weight(1f))
                 Box {
-                    IconButton(onClick = { overviewMenu = true }, enabled = !busy, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.MoreVert, "タブ一覧メニュー") }
+                    IconButton(onClick = { overviewMenu = true }, enabled = !busy, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.MoreVert, stringResource(R.string.herdrui_overview_menu)) }
                     DropdownMenu(overviewMenu, { overviewMenu = false }) {
-                        DropdownMenuItem(text = { Text("新しいワークスペース") }, onClick = { overviewMenu = false; newWorkspace = true })
+                        DropdownMenuItem(text = { Text(stringResource(R.string.herdrui_new_workspace)) }, onClick = { overviewMenu = false; newWorkspace = true })
                         HorizontalDivider()
-                        DropdownMenuItem(text = { Text("すべてのタブを閉じる") },
+                        DropdownMenuItem(text = { Text(stringResource(R.string.herdrui_close_all_tabs)) },
                             enabled = rawState.tabs.isNotEmpty(), onClick = { overviewMenu = false; closePlan = rawState.bulkClosePlan(BulkCloseKind.TABS) })
-                        DropdownMenuItem(text = { Text("すべてのワークスペースを閉じる") },
+                        DropdownMenuItem(text = { Text(stringResource(R.string.herdrui_close_all_workspaces)) },
                             enabled = rawState.workspaces.isNotEmpty(), onClick = { overviewMenu = false; closePlan = rawState.bulkClosePlan(BulkCloseKind.WORKSPACES) })
                     }
                 }
-                IconButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.size(48.dp)) { VeilIcon(R.drawable.veil_close, "一覧を閉じる") }
+                IconButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.size(48.dp)) { VeilIcon(R.drawable.veil_close, stringResource(R.string.herdrui_close_overview)) }
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             LazyRow(Modifier.fillMaxWidth().height(56.dp).background(CyanVeil.Background), contentPadding = PaddingValues(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                item { FilterChip(workspace == null, { workspace = null }, { Text("すべて · ${state.tabs.size}") }, shape = CircleShape) }
+                item { FilterChip(workspace == null, { workspace = null }, { Text(stringResource(R.string.herdrui_filter_all, state.tabs.size)) }, shape = CircleShape) }
                 items(state.workspaces, key = { it.workspaceId }) { ws ->
                     val selected = workspace == ws.workspaceId
+                    val filteringLabel = stringResource(R.string.herdrui_filtering)
+                    val notFilteringLabel = stringResource(R.string.herdrui_not_filtering)
+                    val targetSuffix = stringResource(R.string.herdrui_new_tab_target)
                     // New tabs go to the filtered workspace, or to herdr's focused one when showing all.
                     val isTarget = ws.workspaceId == (workspace ?: state.focusedWorkspaceId)
                     FilterChip(selected, { workspace = ws.workspaceId },
                         modifier = Modifier.semantics {
                             contentDescription = ws.title
-                            stateDescription = (if (selected) "絞り込み中" else "絞り込みなし") + if (isTarget) "、新しいタブの追加先" else ""
+                            stateDescription = (if (selected) filteringLabel else notFilteringLabel) + if (isTarget) targetSuffix else ""
                         },
                         border = if (isTarget && !selected) BorderStroke(1.dp, CyanVeil.Cyan)
                             else FilterChipDefaults.filterChipBorder(enabled = true, selected = selected),
@@ -136,11 +141,11 @@ fun PaneOverview(state: HerdrState, herdr: HerdrController, onDismiss: () -> Uni
                 }
             }
             Row(Modifier.fillMaxWidth().height(40.dp).background(CyanVeil.Background).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${tabs.size} 個のタブ", Modifier.weight(1f), fontSize = 14.sp)
-                if (waiting > 0) Text("! 入力待ち $waiting", fontSize = 11.sp, color = CyanVeil.Amber)
+                Text(pluralStringResource(R.plurals.herdrui_tab_count, tabs.size, tabs.size), Modifier.weight(1f), fontSize = 14.sp)
+                if (waiting > 0) Text(stringResource(R.string.herdrui_waiting_count, waiting), fontSize = 11.sp, color = CyanVeil.Amber)
             }
             if (tabs.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text("このワークスペースにはタブがありません", color = CyanVeil.Muted, fontSize = 12.sp)
+                Text(stringResource(R.string.herdrui_no_tabs), color = CyanVeil.Muted, fontSize = 12.sp)
             } else LazyVerticalGrid(GridCells.Fixed(2), Modifier.weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)) {
@@ -151,7 +156,7 @@ fun PaneOverview(state: HerdrState, herdr: HerdrController, onDismiss: () -> Uni
                 }
             }
             Box(Modifier.fillMaxWidth().height(52.dp).background(CyanVeil.Background), contentAlignment = Alignment.Center) {
-                Text("カードを横スワイプで閉じる", fontSize = 12.sp, color = CyanVeil.Muted)
+                Text(stringResource(R.string.herdrui_swipe_hint), fontSize = 12.sp, color = CyanVeil.Muted)
             }
         }
     }
@@ -160,12 +165,12 @@ fun PaneOverview(state: HerdrState, herdr: HerdrController, onDismiss: () -> Uni
     closePlan?.let { plan ->
         val closingTabs = plan.kind == BulkCloseKind.TABS
         AlertDialog(onDismissRequest = { closePlan = null },
-            title = { Text(if (closingTabs) "すべてのタブを閉じる" else "すべてのワークスペースを閉じる") },
-            text = { Text((if (closingTabs) "全ワークスペースの ${plan.tabCount} 個のタブ（${plan.paneCount} ペイン）を閉じます。"
-                else "この接続の ${plan.workspaceCount} 個のワークスペース、${plan.tabCount} 個のタブ（${plan.paneCount} ペイン）を閉じます。") +
-                "実行中のリモートプロセスは終了します。元に戻せません。表示フィルタにかかわらず全ワークスペースが対象です。") },
-            confirmButton = { TextButton(onClick = { herdr.closeAllConfirmed(plan); closePlan = null }) { Text("すべて閉じる") } },
-            dismissButton = { TextButton(onClick = { closePlan = null }) { Text("キャンセル") } })
+            title = { Text(if (closingTabs) stringResource(R.string.herdrui_close_all_tabs) else stringResource(R.string.herdrui_close_all_workspaces)) },
+            text = { Text((if (closingTabs) stringResource(R.string.herdrui_close_tabs_body, pluralStringResource(R.plurals.herdrui_tab_count, plan.tabCount, plan.tabCount), pluralStringResource(R.plurals.herdrui_pane_count, plan.paneCount, plan.paneCount))
+                else stringResource(R.string.herdrui_close_ws_body, pluralStringResource(R.plurals.herdrui_workspace_count, plan.workspaceCount, plan.workspaceCount), pluralStringResource(R.plurals.herdrui_tab_count, plan.tabCount, plan.tabCount), pluralStringResource(R.plurals.herdrui_pane_count, plan.paneCount, plan.paneCount))) +
+                stringResource(R.string.herdrui_close_all_note)) },
+            confirmButton = { TextButton(onClick = { herdr.closeAllConfirmed(plan); closePlan = null }) { Text(stringResource(R.string.herdrui_close_all_confirm)) } },
+            dismissButton = { TextButton(onClick = { closePlan = null }) { Text(stringResource(R.string.herdrui_cancel)) } })
     }
     val expanded = state.tabs.firstOrNull { it.tabId == expandedId }
     if (expanded != null) ModalBottomSheet(onDismissRequest = { expandedId = null }, containerColor = CyanVeil.Surface,
@@ -174,16 +179,16 @@ fun PaneOverview(state: HerdrState, herdr: HerdrController, onDismiss: () -> Uni
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(expanded.title, fontSize = 24.sp, fontWeight = FontWeight.Medium)
-                    Text("${state.workspace(expanded.workspaceId)?.title.orEmpty()} · ${state.panes.count { it.tabId == expanded.tabId }} ペイン",
+                    Text("${state.workspace(expanded.workspaceId)?.title.orEmpty()} · " + pluralStringResource(R.plurals.herdrui_pane_count, state.panes.count { it.tabId == expanded.tabId }, state.panes.count { it.tabId == expanded.tabId }),
                         fontSize = 12.sp, color = CyanVeil.Muted)
                 }
-                IconButton(onClick = { expandedId = null }, modifier = Modifier.size(48.dp)) { VeilIcon(R.drawable.veil_close, "プレビューを閉じる") }
+                IconButton(onClick = { expandedId = null }, modifier = Modifier.size(48.dp)) { VeilIcon(R.drawable.veil_close, stringResource(R.string.herdrui_close_preview)) }
             }
             TabPreview(expanded, state, previews, terminalFont, true, Modifier.weight(1f).fillMaxWidth())
             val status = tabStatus(state.panes.filter { it.tabId == expanded.tabId })
-            Text(status.first, color = status.second, fontSize = 12.sp)
-            Button(onClick = { herdr.focusTab(expanded.tabId); expandedId = null; onDismiss() }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("このタブを開く") }
-            Text("プレビュー中 · 表示中のタブは ${state.tabs.firstOrNull { it.tabId == state.focusedTabId }?.title.orEmpty()}", fontSize = 11.sp, color = CyanVeil.Muted)
+            Text(stringResource(status.first), color = status.second, fontSize = 12.sp)
+            Button(onClick = { herdr.focusTab(expanded.tabId); expandedId = null; onDismiss() }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text(stringResource(R.string.herdrui_open_this_tab)) }
+            Text(stringResource(R.string.herdrui_previewing, state.tabs.firstOrNull { it.tabId == state.focusedTabId }?.title.orEmpty()), fontSize = 11.sp, color = CyanVeil.Muted)
         }
     }
 }
@@ -196,6 +201,10 @@ internal fun TabCard(tab: TabInfo, state: HerdrState, previews: Map<String, Stri
     val threshold = with(LocalDensity.current) { 72.dp.toPx() }
     val close by rememberUpdatedState(onClose)
     val status = tabStatus(state.panes.filter { it.tabId == tab.tabId })
+    val statusText = stringResource(status.first)
+    val closeTabLabel = stringResource(R.string.herdrui_close_tab)
+    val enlargeLabel = stringResource(R.string.herdrui_enlarge_preview)
+    val cardDesc = stringResource(R.string.herdrui_tab_card_desc, tab.title, statusText)
     Column(Modifier.fillMaxWidth().height(246.dp).offset { IntOffset(dragX.roundToInt(), 0) }
         .clip(MaterialTheme.shapes.large).background(CyanVeil.Surface)
         .border(if (focused) 2.dp else 1.dp, if (focused) CyanVeil.Cyan else CyanVeil.Border, MaterialTheme.shapes.large)
@@ -205,20 +214,20 @@ internal fun TabCard(tab: TabInfo, state: HerdrState, previews: Map<String, Stri
                 onDragEnd = { val shouldClose = abs(dragX) >= threshold; dragX = 0f; if (shouldClose) close() }, onDragCancel = { dragX = 0f })
         }
         .combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onPreview)
-        .semantics { selected = focused; contentDescription = "${tab.title}、${status.first}"
-            customActions = if (enabled) listOf(CustomAccessibilityAction("タブを閉じる") { onClose(); true }, CustomAccessibilityAction("プレビューを拡大") { onPreview(); true }) else emptyList() }) {
+        .semantics { selected = focused; contentDescription = cardDesc
+            customActions = if (enabled) listOf(CustomAccessibilityAction(closeTabLabel) { onClose(); true }, CustomAccessibilityAction(enlargeLabel) { onPreview(); true }) else emptyList() }) {
         Row(Modifier.fillMaxWidth().height(48.dp).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             VeilIcon(R.drawable.veil_terminal, null, CyanVeil.Cyan)
             Text(tab.title, Modifier.weight(1f).padding(start = 4.dp), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            IconButton(onClick = onClose, enabled = enabled, modifier = Modifier.size(48.dp)) { VeilIcon(R.drawable.veil_close, "${tab.title}を閉じる") }
+            IconButton(onClick = onClose, enabled = enabled, modifier = Modifier.size(48.dp)) { VeilIcon(R.drawable.veil_close, stringResource(R.string.herdrui_close_named, tab.title)) }
         }
         TabPreview(tab, state, previews, terminalFont, false, Modifier.fillMaxWidth().height(142.dp).padding(horizontal = 6.dp))
         Row(Modifier.fillMaxWidth().height(56.dp).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(status.first, fontSize = 11.sp, color = status.second, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(statusText, fontSize = 11.sp, color = status.second, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(state.workspace(tab.workspaceId)?.title.orEmpty(), fontFamily = terminalFont, fontSize = 10.sp, color = CyanVeil.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            IconButton(onClick = onPreview, enabled = enabled, modifier = Modifier.size(48.dp)) { VeilIcon(R.drawable.veil_expand, "${tab.title}のプレビューを拡大") }
+            IconButton(onClick = onPreview, enabled = enabled, modifier = Modifier.size(48.dp)) { VeilIcon(R.drawable.veil_expand, stringResource(R.string.herdrui_enlarge_preview_named, tab.title)) }
         }
     }
 }
@@ -237,7 +246,7 @@ private fun TabPreview(tab: TabInfo, state: HerdrState, previews: Map<String, St
                 .padding(if (expanded) 16.dp else 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(pane?.foregroundCwd ?: pane?.cwd ?: pane?.title2.orEmpty(), fontFamily = font,
                     fontSize = if (expanded) 11.sp else 8.sp, color = CyanVeil.Mint, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(previews[id]?.trimEnd() ?: "プレビューを読み込み中…", color = if (expanded) CyanVeil.Text else CyanVeil.Muted, fontFamily = font,
+                Text(previews[id]?.trimEnd() ?: stringResource(R.string.herdrui_loading_preview), color = if (expanded) CyanVeil.Text else CyanVeil.Muted, fontFamily = font,
                     fontSize = if (expanded) 12.sp else 8.sp, lineHeight = if (expanded) 19.sp else 12.sp, softWrap = false, overflow = TextOverflow.Clip)
             }
         }
@@ -245,8 +254,8 @@ private fun TabPreview(tab: TabInfo, state: HerdrState, previews: Map<String, St
 }
 
 private fun tabStatus(panes: List<PaneInfo>) = when {
-    panes.any { it.agentStatus == AgentStatus.BLOCKED } -> "! 入力待ち" to CyanVeil.Amber
-    panes.any { it.agentStatus == AgentStatus.WORKING } -> "● 実行中" to CyanVeil.Cyan
-    panes.any { it.agentStatus == AgentStatus.DONE } -> "✓ 完了" to CyanVeil.Mint
-    else -> "● 待機中" to CyanVeil.Muted
+    panes.any { it.agentStatus == AgentStatus.BLOCKED } -> R.string.herdrui_status_blocked to CyanVeil.Amber
+    panes.any { it.agentStatus == AgentStatus.WORKING } -> R.string.herdrui_status_working to CyanVeil.Cyan
+    panes.any { it.agentStatus == AgentStatus.DONE } -> R.string.herdrui_status_done to CyanVeil.Mint
+    else -> R.string.herdrui_status_idle to CyanVeil.Muted
 }

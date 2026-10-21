@@ -1,5 +1,6 @@
 package com.shibaken.androidterminal.ui
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -80,14 +81,14 @@ fun QuickReplyBar(paneId: String, terminal: PaneTerminal?, herdr: HerdrControlle
         }
     }
     Column(modifier.padding(4.dp).clip(RoundedCornerShape(12.dp)).background(CyanVeil.Raised).padding(horizontal = 8.dp, vertical = 6.dp)) {
-    Text("入力待ち · エージェント", fontSize = 10.sp, color = CyanVeil.Amber)
+    Text(stringResource(R.string.term_awaiting_agent), fontSize = 10.sp, color = CyanVeil.Amber)
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         choices.forEach { c ->
-            Chip(c.description, onClick = { herdr.sendInput(paneId, c.text, c.keys) }) {
+            Chip(c.descriptionRes?.let { stringResource(it) } ?: c.description, onClick = { herdr.sendInput(paneId, c.text, c.keys) }) {
                 when (c.kind) {
                     QuickChoice.Kind.ENTER -> Icon(Icons.AutoMirrored.Filled.KeyboardReturn, null, tint = chipFg())
                     QuickChoice.Kind.ESC -> Icon(Icons.Filled.Close, null, tint = chipFg())
@@ -96,7 +97,7 @@ fun QuickReplyBar(paneId: String, terminal: PaneTerminal?, herdr: HerdrControlle
                 }
             }
         }
-        Chip("メッセージを作成", onClick = onCompose) { VeilIcon(R.drawable.veil_edit, null, chipFg()) }
+        Chip(stringResource(R.string.term_compose_message), onClick = onCompose) { VeilIcon(R.drawable.veil_edit, null, chipFg()) }
     }
     }
 }

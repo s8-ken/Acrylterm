@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.tailscale
 
+import com.shibaken.androidterminal.R
+import com.shibaken.androidterminal.App
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.LinkProperties
@@ -87,7 +89,7 @@ class TailscaleManager(private val context: Context) {
     }
 
     private fun call(name: String, vararg args: Any?): Any? {
-        val cls = bridge ?: throw IOException("このビルドには Tailscale が組み込まれていません(tsbridge/build.sh で tsbridge.aar をビルドしてください)")
+        val cls = bridge ?: throw IOException(App.str(R.string.core_ts_not_built_in_build))
         val m = cls.methods.first { it.name == name && it.parameterTypes.size == args.size }
         return try {
             m.invoke(null, *args)
@@ -143,21 +145,21 @@ class TailscaleManager(private val context: Context) {
 
     /** Suspends until the node is Running (or throws with a helpful message). */
     suspend fun awaitRunning(timeoutMs: Long = 30_000) {
-        if (!available) throw IOException("このビルドには Tailscale が組み込まれていません。ホスト設定で「Tailscale 経由」をオフにするか、tsbridge.aar を組み込んでください。")
+        if (!available) throw IOException(App.str(R.string.core_ts_not_built_in))
         if (!_status.value.running) start(null)
         try {
             withTimeout(timeoutMs) {
                 while (true) {
                     refreshStatus()
-                    startError?.let { throw IOException("Tailscale の起動に失敗しました: $it") }
+                    startError?.let { throw IOException(App.str(R.string.core_ts_start_failed, it)) }
                     val s = _status.value
                     if (s.isConnected) return@withTimeout
-                    if (s.needsLogin) throw IOException("Tailscale へのログインが必要です。Tailscale 画面からログインしてください。")
+                    if (s.needsLogin) throw IOException(App.str(R.string.core_ts_login_required))
                     delay(500)
                 }
             }
         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-            throw IOException("Tailscale の接続がタイムアウトしました (状態: ${_status.value.backendState})")
+            throw IOException(App.str(R.string.core_ts_timeout, _status.value.backendState.toString()))
         }
     }
 

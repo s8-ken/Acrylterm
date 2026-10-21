@@ -14,3 +14,9 @@
 - ライセンス:依存(`app/build.gradle.kts` / `tsbridge/go.mod`)を変えたら `scripts/gen-go-licenses.sh` を実行して `app/config/` の差分をコミットする(Android 側は AboutLibraries がビルド時に自動収集。Go が無い環境でもビルドできるよう Go 側は生成物をコミット)。
 - 実機:`./gradlew :app:installDebug`(USB デバッグで接続した端末)。Gradle には `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"` が必要。
   - Wi-Fi 経由:端末でワイヤレス デバッグを有効にし、`adb mdns services` で `ip:port` を確認して `adb connect <ip:port>` してから同じコマンドを使う(ペアリング済み)。
+
+## 文字列(i18n)
+- UI 文字列は Kotlin に直書きしない。`res/values/strings_<area>.xml`(英語、既定ロケール)と `res/values-ja/strings_<area>.xml`(日本語)の両方に同じキーで足す。area は `term` / `herdrui` / `ext` / `settings` / `core`。
+- Composable では `stringResource`、Context の無い非 UI コードでは `App.str` / `App.plural`(JVM テストでは `"string/<id>"` を返す)。
+- 新しい言語は `values-<locale>/` を足し、`res/xml/locales_config.xml` に `<locale>` を追加する。
+- リモートに送るコマンドや AI CLI へのプロンプト(`ExtSync` など)は訳さない。

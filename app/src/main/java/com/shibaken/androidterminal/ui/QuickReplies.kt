@@ -1,5 +1,8 @@
 package com.shibaken.androidterminal.ui
 
+import androidx.annotation.StringRes
+import com.shibaken.androidterminal.R
+
 /** One quick-reply chip for a pane that is waiting for the user. */
 data class QuickChoice(
     val kind: Kind,
@@ -7,6 +10,8 @@ data class QuickChoice(
     val label: String,
     /** Spoken / accessibility description. */
     val description: String,
+    /** When set, the localized description to show instead of [description]. */
+    @StringRes val descriptionRes: Int? = null,
     /** Text to type (before [keys]). */
     val text: String? = null,
     /** herdr key names sent after [text]. */
@@ -17,8 +22,8 @@ data class QuickChoice(
 
 /** Derives chips from the last lines of a blocked agent's pane. */
 object QuickReplies {
-    val ENTER = QuickChoice(QuickChoice.Kind.ENTER, "", "承認(Enter)", keys = listOf("enter"))
-    val ESC = QuickChoice(QuickChoice.Kind.ESC, "", "キャンセル(Esc)", keys = listOf("esc"))
+    val ENTER = QuickChoice(QuickChoice.Kind.ENTER, "", "Approve (Enter)", R.string.term_choice_approve, keys = listOf("enter"))
+    val ESC = QuickChoice(QuickChoice.Kind.ESC, "", "Cancel (Esc)", R.string.term_choice_cancel, keys = listOf("esc"))
 
     private val NUMBERED = Regex("""^\s*[❯>›»▶→*●○]?\s*(\d{1,2})[.)]\s+(\S.*?)\s*$""")
     private val YES_NO = Regex("""[(\[]\s*([yY])\s*/\s*([nN])\s*[)\]]""")
@@ -63,8 +68,8 @@ object QuickReplies {
                 out += QuickChoice(QuickChoice.Kind.OPTION, n.toString(), "$n. $label", text = n.toString())
             }
         } else if (lines.takeLast(6).any { YES_NO.containsMatchIn(it.first) }) {
-            out += QuickChoice(QuickChoice.Kind.OPTION, "y", "はい(y)", text = "y", keys = listOf("enter"))
-            out += QuickChoice(QuickChoice.Kind.OPTION, "n", "いいえ(n)", text = "n", keys = listOf("enter"))
+            out += QuickChoice(QuickChoice.Kind.OPTION, "y", "Yes (y)", R.string.term_choice_yes, text = "y", keys = listOf("enter"))
+            out += QuickChoice(QuickChoice.Kind.OPTION, "n", "No (n)", R.string.term_choice_no, text = "n", keys = listOf("enter"))
         }
         out += ESC
         return out

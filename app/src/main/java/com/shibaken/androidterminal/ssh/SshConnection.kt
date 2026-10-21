@@ -1,5 +1,6 @@
 package com.shibaken.androidterminal.ssh
 
+import com.shibaken.androidterminal.R
 import com.shibaken.androidterminal.App
 import com.shibaken.androidterminal.data.AuthMethod
 import com.shibaken.androidterminal.data.HostProfile
@@ -47,7 +48,7 @@ class SshConnection(private val app: App, val profile: HostProfile) {
         client.transport.timeoutMs = 120_000
 
         val (host, port) = if (profile.useTailscale) {
-            status("Tailscale を準備中…")
+            status(App.str(R.string.core_ts_preparing))
             app.tailscale.awaitRunning()
             val p = app.tailscale.forward(profile.host, profile.port)
             forwardPort = p
@@ -56,14 +57,14 @@ class SshConnection(private val app: App, val profile: HostProfile) {
             profile.host to profile.port
         }
 
-        status("${profile.host}:${profile.port} に接続中…")
+        status(App.str(R.string.core_connecting_to, profile.host, profile.port))
         // sshj starts the keepalive thread inside connect(), only if the interval is already set.
         client.connection.keepAlive.keepAliveInterval = 15
         client.connect(host, port)
         // The loopback listener is only needed for the initial connect.
         forwardPort?.let { app.tailscale.stopForward(it); forwardPort = null }
 
-        status("認証中…")
+        status(App.str(R.string.core_authenticating))
         authenticate()
         client.transport.timeoutMs = 30_000
         app.hosts.markConnected(profile.id)
@@ -73,24 +74,24 @@ class SshConnection(private val app: App, val profile: HostProfile) {
         val user = profile.username
         when (profile.authMethod) {
             AuthMethod.KEY -> {
-                val keyId = profile.keyId ?: throw IOException("このホストに SSH 鍵が設定されていません")
-                val entry = app.keys.get(keyId) ?: throw IOException("設定された SSH 鍵が見つかりません")
+                val keyId = profile.keyId ?: throw IOException(App.str(R.string.core_no_key_set))
+                val entry = app.keys.get(keyId) ?: throw IOException(App.str(R.string.core_key_not_found))
                 if (entry.requireBiometric) {
-                    val ok = Prompter.biometric("SSH 鍵を使用", "「${entry.name}」で ${profile.displayName} に接続します")
-                    if (!ok) throw SshCancelledException("生体認証がキャンセルされました")
+                    val ok = Prompter.biometric(App.str(R.string.core_biometric_title), App.str(R.string.core_biometric_subtitle, entry.name, profile.displayName))
+                    if (!ok) throw SshCancelledException(App.str(R.string.core_biometric_cancelled))
                 }
                 var passphrase: CharArray? = null
                 if (entry.hasPassphrase && !entry.passphraseSaved) {
-                    val p = Prompter.secret("鍵のパスフレーズ", "「${entry.name}」のパスフレーズを入力してください", "パスフレーズ")
-                        ?: throw SshCancelledException("キャンセルされました")
+                    val p = Prompter.secret(App.str(R.string.core_passphrase_title), App.str(R.string.core_passphrase_message, entry.name), App.str(R.string.core_passphrase_label))
+                        ?: throw SshCancelledException(App.str(R.string.core_cancelled))
                     passphrase = p.toCharArray()
                 }
                 val provider = app.keys.keyProvider(keyId, passphrase)
                 withContext(Dispatchers.IO) { client.authPublickey(user, provider) }
             }
             AuthMethod.PASSWORD -> {
-                val pw = Prompter.secret("パスワード", "${profile.displayName} のパスワード", "パスワード")
-                    ?: throw SshCancelledException("キャンセルされました")
+                val pw = Prompter.secret(App.str(R.string.core_password_title), App.str(R.string.core_password_message, profile.displayName), App.str(R.string.core_password_label))
+                    ?: throw SshCancelledException(App.str(R.string.core_cancelled))
                 withContext(Dispatchers.IO) {
                     try {
                         client.authPassword(user, pw.toCharArray())

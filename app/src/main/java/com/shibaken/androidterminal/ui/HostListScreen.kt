@@ -47,26 +47,26 @@ fun HostListScreen(
                     Text(stringResource(R.string.app_name), fontSize = 25.sp, fontWeight = FontWeight.Medium)
                     Text("YOUR PRIVATE CONNECTION", fontSize = 10.sp, letterSpacing = 1.sp, color = CyanVeil.Muted)
                 }
-                VeilIconButton(R.drawable.veil_tune, "設定", onAppearance)
+                VeilIconButton(R.drawable.veil_tune, stringResource(R.string.settings_hostlist_settings), onAppearance)
             }
             Box(Modifier.weight(1f)) {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 104.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (sessions.isNotEmpty()) {
-                        item { SectionHeading("接続中", "${sessions.size} SESSION${if (sessions.size > 1) "S" else ""}") }
+                        item { SectionHeading(stringResource(R.string.settings_hostlist_connected_section), "${sessions.size} SESSION${if (sessions.size > 1) "S" else ""}") }
                         items(sessions, key = { "session-${it.id}" }) { session ->
                             SessionRow(session, onClick = { onOpenSession(session.id) })
                         }
                     }
-                    item { SectionHeading("保存済みホスト", "${hosts.size} HOST${if (hosts.size != 1) "S" else ""}", Modifier.padding(top = 4.dp)) }
+                    item { SectionHeading(stringResource(R.string.settings_hostlist_saved_hosts), "${hosts.size} HOST${if (hosts.size != 1) "S" else ""}", Modifier.padding(top = 4.dp)) }
                     if (hosts.isEmpty()) {
                         item {
                             VeilCard(Modifier.fillMaxWidth()) {
                                 Box(Modifier.size(48.dp).background(CyanVeil.Raised, CircleShape), contentAlignment = Alignment.Center) {
                                     VeilIcon(R.drawable.veil_terminal, null, CyanVeil.Cyan)
                                 }
-                                Text("いつもの環境へ、つながる。", style = MaterialTheme.typography.titleMedium)
-                                Text("Mac mini や開発サーバーを登録して、\n手元から作業を始めましょう。", color = CyanVeil.Muted, style = MaterialTheme.typography.bodyMedium)
-                                Text("Tailscale の MagicDNS 名でも接続できます。", color = CyanVeil.Muted, fontSize = 11.sp)
+                                Text(stringResource(R.string.settings_hostlist_empty_title), style = MaterialTheme.typography.titleMedium)
+                                Text(stringResource(R.string.settings_hostlist_empty_body), color = CyanVeil.Muted, style = MaterialTheme.typography.bodyMedium)
+                                Text(stringResource(R.string.settings_hostlist_empty_hint), color = CyanVeil.Muted, fontSize = 11.sp)
                             }
                         }
                     }
@@ -81,7 +81,7 @@ fun HostListScreen(
                             }
                             FilledTonalButton(onKeys, Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
                                 VeilIcon(R.drawable.veil_key, null, CyanVeil.Cyan)
-                                Spacer(Modifier.width(8.dp)); Text("SSH 鍵", fontSize = 12.sp)
+                                Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.settings_hostlist_ssh_keys), fontSize = 12.sp)
                             }
                         }
                     }
@@ -89,13 +89,13 @@ fun HostListScreen(
                         FilledTonalButton(onExtScripts, Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                             Icon(Icons.Filled.Code, null, tint = CyanVeil.Cyan)
                             Spacer(Modifier.width(8.dp))
-                            Text("拡張スクリプト")
+                            Text(stringResource(R.string.settings_hostlist_extensions))
                         }
                     }
                 }
                 Button(onClick = { onEdit(null) }, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp).heightIn(min = 56.dp), shape = CircleShape) {
                     VeilIcon(R.drawable.veil_plus, null, CyanVeil.Ink)
-                    Spacer(Modifier.width(8.dp)); Text("ホストを追加")
+                    Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.settings_hostlist_add_host))
                 }
             }
         }
@@ -113,9 +113,9 @@ internal fun HostRow(h: HostProfile, onConnect: () -> Unit, onEdit: () -> Unit) 
                 Text(h.displayName, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("${h.username}@${h.host}:${h.port}", fontSize = 11.sp, fontFamily = FontFamily.Monospace,
                     color = CyanVeil.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(buildList { add(if (h.useTailscale) "Tailscale" else "SSH"); if (h.herdrEnabled) add("マルチタブ"); if (h.useMosh) add("Mosh") }.joinToString(" · "), fontSize = 10.sp, color = CyanVeil.Muted)
+                Text(buildList { add(if (h.useTailscale) "Tailscale" else "SSH"); if (h.herdrEnabled) add(stringResource(R.string.settings_hostlist_multitab)); if (h.useMosh) add("Mosh") }.joinToString(" · "), fontSize = 10.sp, color = CyanVeil.Muted)
             }
-            IconButton(onEdit) { VeilIcon(R.drawable.veil_edit, "${h.displayName}を編集", CyanVeil.Muted) }
+            IconButton(onEdit) { VeilIcon(R.drawable.veil_edit, stringResource(R.string.settings_hostlist_edit_host, h.displayName), CyanVeil.Muted) }
         }
     }
 }
@@ -127,9 +127,9 @@ private fun SessionRow(s: SshTerminalSession, onClick: () -> Unit) {
     val title by s.title.collectAsState()
     val herdr = s.herdr?.state?.collectAsState()?.value
     val (status, color) = when (state) {
-        is ConnState.Connected -> "● 接続中" to CyanVeil.Mint
-        is ConnState.Connecting -> "接続しています…" to CyanVeil.Cyan
-        is ConnState.Disconnected -> "切断" to CyanVeil.Rose
+        is ConnState.Connected -> stringResource(R.string.settings_hostlist_state_connected) to CyanVeil.Mint
+        is ConnState.Connecting -> stringResource(R.string.settings_hostlist_state_connecting) to CyanVeil.Cyan
+        is ConnState.Disconnected -> stringResource(R.string.settings_hostlist_state_disconnected) to CyanVeil.Rose
     }
     VeilCard(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -146,8 +146,8 @@ private fun SessionRow(s: SshTerminalSession, onClick: () -> Unit) {
             StatusPill(status, color)
             if (s.profile.useTailscale) StatusPill("Tailscale")
             val blocked = herdr?.blockedCount ?: 0
-            if (blocked > 0) StatusPill("入力待ち $blocked", CyanVeil.Amber)
+            if (blocked > 0) StatusPill(stringResource(R.string.settings_hostlist_waiting_input, blocked), CyanVeil.Amber)
         }
-        Button(onClick, Modifier.align(Alignment.CenterHorizontally).heightIn(min = 52.dp)) { Text("セッションを開く") }
+        Button(onClick, Modifier.align(Alignment.CenterHorizontally).heightIn(min = 52.dp)) { Text(stringResource(R.string.settings_hostlist_open_session)) }
     }
 }

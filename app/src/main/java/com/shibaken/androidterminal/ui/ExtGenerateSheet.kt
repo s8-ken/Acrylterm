@@ -1,6 +1,8 @@
 package com.shibaken.androidterminal.ui
 
 import androidx.compose.foundation.layout.*
+import com.shibaken.androidterminal.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
@@ -89,23 +91,23 @@ fun ExtGenerateSheet(ext: SessionExt, hostId: String, app: App, initialName: Str
         dragHandle = { BottomSheetDefaults.DragHandle(color = CyanVeil.Border) }) {
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("拡張を作る", fontSize = 23.sp, fontWeight = FontWeight.Medium)
+            Text(stringResource(R.string.ext_gen_title), fontSize = 23.sp, fontWeight = FontWeight.Medium)
             val hostName = remember(hostId) { app.hosts.get(hostId)?.displayName }
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("接続先ホストの AI エージェントが拡張を作成します" + (hostName?.let { "($it)" } ?: ""),
+                Text(if (hostName != null) stringResource(R.string.ext_gen_desc_host, hostName) else stringResource(R.string.ext_gen_desc),
                     color = CyanVeil.Muted, fontSize = 12.sp)
-                Text("保存先: ~/.config/acrylterm/", color = CyanVeil.Muted, fontSize = 12.sp,
+                Text(stringResource(R.string.ext_gen_save_path), color = CyanVeil.Muted, fontSize = 12.sp,
                     fontFamily = FontFamily.Monospace)
             }
             val kinds = ExtAgents.Kind.entries
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 kinds.forEachIndexed { i, k ->
                     SegmentedButton(selected = kind == k, onClick = { kind = k },
-                        shape = SegmentedButtonDefaults.itemShape(i, kinds.size), enabled = !running) { Text(k.label) }
+                        shape = SegmentedButtonDefaults.itemShape(i, kinds.size), enabled = !running) { Text(if (k == ExtAgents.Kind.CUSTOM) stringResource(R.string.ext_agent_other) else k.label) }
                 }
             }
             if (kind == ExtAgents.Kind.CUSTOM) {
-                OutlinedTextField(custom, { custom = it }, singleLine = true, label = { Text("コマンド") },
+                OutlinedTextField(custom, { custom = it }, singleLine = true, label = { Text(stringResource(R.string.ext_command)) },
                     isError = custom.isBlank(), enabled = !running, modifier = Modifier.fillMaxWidth())
             }
             if (existing.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -116,11 +118,11 @@ fun ExtGenerateSheet(ext: SessionExt, hostId: String, app: App, initialName: Str
             currentSummary?.let { cur ->
                 VeilCard(Modifier.fillMaxWidth()) { ExtSummaryContent(full, cur) }
             }
-            OutlinedTextField(name, { name = it.trim() }, singleLine = true, label = { Text("ファイル名") },
+            OutlinedTextField(name, { name = it.trim() }, singleLine = true, label = { Text(stringResource(R.string.ext_file_name)) },
                 suffix = { if (!name.endsWith(".lua")) Text(".lua") }, isError = name.isNotBlank() && !nameValid,
                 modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(request, { request = it }, label = { Text("やりたいこと") },
-                placeholder = { Text("例: git status を実行するボタン / ビルドが失敗したら通知", color = CyanVeil.Muted) }, minLines = 3, maxLines = 8,
+            OutlinedTextField(request, { request = it }, label = { Text(stringResource(R.string.ext_request_label)) },
+                placeholder = { Text(stringResource(R.string.ext_request_hint), color = CyanVeil.Muted) }, minLines = 3, maxLines = 8,
                 modifier = Modifier.fillMaxWidth())
             FilledTonalButton(onClick = {
                 app.hosts.get(hostId)?.let { latest ->
@@ -131,11 +133,11 @@ fun ExtGenerateSheet(ext: SessionExt, hostId: String, app: App, initialName: Str
                 uiScope.launch { sheetState.hide(); onDismiss() }
             },
                 enabled = nameValid && request.isNotBlank() && agentCmd.isNotBlank() && !running,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).onGloballyPositioned { submitCenter = it.positionInWindow() + Offset(it.size.width / 2f, it.size.height / 2f) }) { Text(if (modify) "修正を依頼" else "作成を依頼") }
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).onGloballyPositioned { submitCenter = it.positionInWindow() + Offset(it.size.width / 2f, it.size.height / 2f) }) { Text(if (modify) stringResource(R.string.ext_request_modify) else stringResource(R.string.ext_request_create)) }
             when (val s = state) {
                 is GenState.Running -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = CyanVeil.Cyan)
-                    Text("ホストで生成中… 閉じても続きます", color = CyanVeil.Muted, fontSize = 13.sp)
+                    Text(stringResource(R.string.ext_generating), color = CyanVeil.Muted, fontSize = 13.sp)
                 }
                 is GenState.Done -> VeilCard(Modifier.fillMaxWidth()) { ExtSummaryContent(s.name, s.summary, done = true) }
                 is GenState.Failed -> Text(s.message, color = CyanVeil.Rose, fontSize = 13.sp)
@@ -152,9 +154,9 @@ fun ExtGenerateSheet(ext: SessionExt, hostId: String, app: App, initialName: Str
 fun ExtTags(s: ExtSummary, modifier: Modifier = Modifier) {
     if (s.macroCount == 0 && !s.hasAutomation && !s.hasQuickReplies) return
     FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (s.macroCount > 0) StatusPill("⚡マクロ ${s.macroCount}", CyanVeil.Cyan)
-        if (s.hasAutomation) StatusPill("自動処理", CyanVeil.Amber)
-        if (s.hasQuickReplies) StatusPill("返信候補", CyanVeil.Mint)
+        if (s.macroCount > 0) StatusPill(stringResource(R.string.ext_tag_macro, s.macroCount), CyanVeil.Cyan)
+        if (s.hasAutomation) StatusPill(stringResource(R.string.ext_tag_automation), CyanVeil.Amber)
+        if (s.hasQuickReplies) StatusPill(stringResource(R.string.ext_tag_quick_replies), CyanVeil.Mint)
     }
 }
 
@@ -169,12 +171,12 @@ fun ExtSummaryContent(fileName: String, s: ExtSummary, done: Boolean = false) {
         if (s.summary != null) Text(fileName, color = CyanVeil.Muted, fontSize = 12.sp)
         s.usage.forEach { Text("・$it", fontSize = 13.sp, color = CyanVeil.Text) }
         if (s.hasFeatures) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (s.keys.isNotEmpty()) StatusPill("マクロ: " + s.keys.joinToString(", "))
-            if (s.commands.isNotEmpty()) StatusPill("マクロ: " + s.commands.joinToString(", "))
-            if (s.triggers > 0) StatusPill("自動処理(出力) ×${s.triggers}", CyanVeil.Amber)
-            if (s.quickReplies > 0) StatusPill("返信候補 ×${s.quickReplies}", CyanVeil.Mint)
-            if (s.timers > 0) StatusPill("自動処理(タイマー) ×${s.timers}", CyanVeil.Amber)
-            if (s.events.isNotEmpty()) StatusPill("自動処理(イベント): " + s.events.joinToString(", "), CyanVeil.Muted)
+            if (s.keys.isNotEmpty()) StatusPill(stringResource(R.string.ext_pill_macro, s.keys.joinToString(", ")))
+            if (s.commands.isNotEmpty()) StatusPill(stringResource(R.string.ext_pill_macro, s.commands.joinToString(", ")))
+            if (s.triggers > 0) StatusPill(stringResource(R.string.ext_pill_trigger, s.triggers), CyanVeil.Amber)
+            if (s.quickReplies > 0) StatusPill(stringResource(R.string.ext_pill_quick_replies, s.quickReplies), CyanVeil.Mint)
+            if (s.timers > 0) StatusPill(stringResource(R.string.ext_pill_timer, s.timers), CyanVeil.Amber)
+            if (s.events.isNotEmpty()) StatusPill(stringResource(R.string.ext_pill_events, s.events.joinToString(", ")), CyanVeil.Muted)
         }
     }
 }
@@ -184,17 +186,17 @@ fun ExtSummaryContent(fileName: String, s: ExtSummary, done: Boolean = false) {
 fun ExtResultDialog(state: GenState, onClose: () -> Unit, onEdit: (String) -> Unit, onRetry: () -> Unit) {
     when (state) {
         is GenState.Done -> AlertDialog(onDismissRequest = onClose, containerColor = CyanVeil.Surface,
-            title = { Text("拡張を作成しました") },
+            title = { Text(stringResource(R.string.ext_gen_done_title)) },
             text = { Column(Modifier.verticalScroll(rememberScrollState())) { ExtSummaryContent(state.name, state.summary, done = true) } },
-            confirmButton = { TextButton(onClick = { onEdit(state.name) }) { Text("修正") } },
-            dismissButton = { TextButton(onClick = onClose) { Text("閉じる") } })
+            confirmButton = { TextButton(onClick = { onEdit(state.name) }) { Text(stringResource(R.string.ext_modify)) } },
+            dismissButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.ext_close)) } })
         is GenState.Failed -> AlertDialog(onDismissRequest = onClose, containerColor = CyanVeil.Surface,
-            title = { Text("作成に失敗しました") },
+            title = { Text(stringResource(R.string.ext_result_failed_title)) },
             text = { Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(state.message, color = CyanVeil.Rose, fontSize = 14.sp)
             } },
-            confirmButton = { TextButton(onClick = onRetry) { Text("再試行") } },
-            dismissButton = { TextButton(onClick = onClose) { Text("閉じる") } })
+            confirmButton = { TextButton(onClick = onRetry) { Text(stringResource(R.string.ext_retry)) } },
+            dismissButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.ext_close)) } })
         else -> {}
     }
 }
@@ -208,9 +210,9 @@ fun ExtResultDialog(state: GenState, onClose: () -> Unit, onEdit: (String) -> Un
 fun ExtActivityBadge(state: GenState, onClick: () -> Unit, modifier: Modifier = Modifier) {
     if (state is GenState.Idle) return
     val desc = when (state) {
-        is GenState.Running -> "拡張を作成中"
-        is GenState.Done -> "拡張ができました"
-        else -> "拡張の作成に失敗しました"
+        is GenState.Running -> stringResource(R.string.ext_badge_running)
+        is GenState.Done -> stringResource(R.string.ext_badge_done)
+        else -> stringResource(R.string.ext_gen_failed_title)
     }
     // Saved so rotation / recomposition of the same generation does not replay the birth.
     var born by rememberSaveable { mutableStateOf(false) }

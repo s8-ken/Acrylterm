@@ -1,5 +1,6 @@
 package com.shibaken.androidterminal.ui
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,8 +22,8 @@ fun LicensesScreen(onBack: () -> Unit) {
         Column(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 20.dp)) {
             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                VeilIconButton(R.drawable.veil_back, "戻る", onBack)
-                Text("ライセンス", fontSize = 23.sp, fontWeight = FontWeight.Medium)
+                VeilIconButton(R.drawable.veil_back, stringResource(R.string.settings_back), onBack)
+                Text(stringResource(R.string.settings_licenses), fontSize = 23.sp, fontWeight = FontWeight.Medium)
             }
             LibrariesContainer(
                 Modifier.weight(1f).fillMaxWidth(),

@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.herdr
 
+import com.shibaken.androidterminal.R
+import com.shibaken.androidterminal.App
 import com.shibaken.androidterminal.data.AppJson
 import com.shibaken.androidterminal.ssh.SshConnection
 import kotlinx.coroutines.Dispatchers
@@ -52,14 +54,14 @@ class HerdrClient(private val conn: SshConnection, val socketPath: String) {
                 val ch = try {
                     conn.openStreamLocal(socketPath)
                 } catch (e: Exception) {
-                    throw HerdrException("unreachable", "ソケットに接続できません(サーバーが起動していない可能性があります): ${e.message}")
+                    throw HerdrException("unreachable", App.str(R.string.core_socket_unreachable, e.message.toString()))
                 }
                 try {
                     val out = ch.outputStream
                     out.write((line + "\n").toByteArray(Charsets.UTF_8))
                     out.flush()
                     val reader = BufferedReader(InputStreamReader(ch.inputStream, Charsets.UTF_8))
-                    val reply = reader.readLine() ?: throw IOException("応答がありませんでした")
+                    val reply = reader.readLine() ?: throw IOException(App.str(R.string.core_no_reply))
                     parseResult(AppJson.parseToJsonElement(reply).jsonObject)
                 } finally {
                     runCatching { ch.close() }
@@ -72,7 +74,7 @@ class HerdrClient(private val conn: SshConnection, val socketPath: String) {
             val e = err.jsonObject
             throw HerdrException(
                 e["code"]?.jsonPrimitive?.contentOrNull ?: "error",
-                e["message"]?.jsonPrimitive?.contentOrNull ?: "エラー",
+                e["message"]?.jsonPrimitive?.contentOrNull ?: App.str(R.string.core_error_generic),
             )
         }
         return obj["result"]?.jsonObject ?: JsonObject(emptyMap())

@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.ui
 
+import com.shibaken.androidterminal.R
+import androidx.compose.ui.res.stringResource
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.Column
@@ -49,11 +51,11 @@ private fun HostKeyDialog(r: PromptRequest.HostKey) {
             Column {
                 if (r.previousFingerprint != null) {
                     Text(
-                        "警告: 以前と異なるホスト鍵です。中間者攻撃の可能性があります。Mac の SSH 鍵を再生成した覚えがなければ接続しないでください。",
+                        stringResource(R.string.term_hostkey_changed_warning),
                         color = MaterialTheme.colorScheme.error,
                     )
                     Spacer(Modifier.height(8.dp))
-                    Text("以前: ${r.previousFingerprint}", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.term_hostkey_previous, r.previousFingerprint.orEmpty()), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(4.dp))
                 }
                 Text("${r.host} (${r.keyType})")
@@ -61,17 +63,17 @@ private fun HostKeyDialog(r: PromptRequest.HostKey) {
                 Text(r.fingerprint, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Mac で `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` を実行すると照合できます。",
+                    stringResource(R.string.term_hostkey_verify_hint),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
         },
         confirmButton = {
             TextButton(onClick = { r.answer.complete(true) }) {
-                Text(if (r.previousFingerprint != null) "置き換えて接続" else "信頼して接続")
+                Text(stringResource(if (r.previousFingerprint != null) R.string.term_hostkey_replace_connect else R.string.term_hostkey_trust_connect))
             }
         },
-        dismissButton = { TextButton(onClick = { r.answer.complete(false) }) { Text("キャンセル") } },
+        dismissButton = { TextButton(onClick = { r.answer.complete(false) }) { Text(stringResource(R.string.term_cancel)) } },
     )
 }
 
@@ -96,7 +98,7 @@ private fun SecretDialog(r: PromptRequest.Secret) {
             }
         },
         confirmButton = { TextButton(onClick = { r.answer.complete(value) }) { Text("OK") } },
-        dismissButton = { TextButton(onClick = { r.answer.complete(null) }) { Text("キャンセル") } },
+        dismissButton = { TextButton(onClick = { r.answer.complete(null) }) { Text(stringResource(R.string.term_cancel)) } },
     )
 }
 

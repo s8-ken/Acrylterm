@@ -1,5 +1,6 @@
 package com.shibaken.androidterminal.session
 
+import com.shibaken.androidterminal.R
 import android.util.Log
 import com.shibaken.androidterminal.App
 import com.shibaken.androidterminal.data.HostProfile
@@ -84,7 +85,7 @@ class SshTerminalSession(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private val _state = MutableStateFlow<ConnState>(ConnState.Connecting("準備中…"))
+    private val _state = MutableStateFlow<ConnState>(ConnState.Connecting(App.str(R.string.core_preparing)))
     val state: StateFlow<ConnState> = _state.asStateFlow()
     private val _title = MutableStateFlow(profile.displayName)
     val title: StateFlow<String> = _title.asStateFlow()
@@ -113,7 +114,7 @@ class SshTerminalSession(
         if (discoveryJob?.isActive == true || switchJob?.isActive == true) return
         val c = conn
         if (c == null || !c.isConnected) {
-            _sessionPicker.value = HerdrSessionPickerState(error = "SSH に接続されていません。再接続してください。")
+            _sessionPicker.value = HerdrSessionPickerState(error = App.str(R.string.core_ssh_not_connected))
             return
         }
         val gen = generation
@@ -124,7 +125,7 @@ class SshTerminalSession(
                 if (gen == generation && conn === c) _sessionPicker.value = HerdrSessionPickerState(sessions = entries)
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
-                if (gen == generation && conn === c) _sessionPicker.value = HerdrSessionPickerState(error = "一覧を取得できませんでした: ${e.message.orEmpty().take(160)}")
+                if (gen == generation && conn === c) _sessionPicker.value = HerdrSessionPickerState(error = App.str(R.string.core_list_failed, e.message.orEmpty().take(160)))
             }
         }
     }
@@ -153,12 +154,12 @@ class SshTerminalSession(
                 _selectedHerdrSession.value = entry.name
                 _connectedHerdrSession.value = null
                 _mode.value = SessionMode.PANES
-                _state.value = ConnState.Connecting("${entry.name} に接続中…")
+                _state.value = ConnState.Connecting(App.str(R.string.core_connecting_entry, entry.name))
                 herdr?.attach(c, entry.name, entry.socketPath, resetState = true)
                 bootstrapJob = scope.launch { bootstrapPanes(c, nextGen, existingOnly = true) }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
-                if (gen == generation && conn === c) _sessionPicker.value = _sessionPicker.value.copy(switchingTo = null, error = e.message ?: "接続できませんでした")
+                if (gen == generation && conn === c) _sessionPicker.value = _sessionPicker.value.copy(switchingTo = null, error = e.message ?: App.str(R.string.core_connect_failed))
             }
         }
     }
@@ -291,7 +292,7 @@ class SshTerminalSession(
             c.connect { msg -> _state.value = ConnState.Connecting(msg) }
             if (profile.useMosh) reapOrphans(c)
             if (herdr != null) {
-                _state.value = ConnState.Connecting("マルチペインを準備中…")
+                _state.value = ConnState.Connecting(App.str(R.string.core_preparing_multipane))
                 val existingOnly = target != null || sessionPreferences.contains(selectionKey)
                 var missing = false
                 if (existingOnly) {
@@ -400,8 +401,8 @@ class SshTerminalSession(
         if (ready == null) {
             if (existingOnly) {
                 h.detach()
-                _state.value = ConnState.Disconnected("${effectiveHerdrSession} の応答を確認できませんでした。セッションを選び直してください。")
-                _sessionPicker.value = _sessionPicker.value.copy(switchingTo = null, error = "接続を確認できませんでした。一覧を更新して選び直してください。")
+                _state.value = ConnState.Disconnected(App.str(R.string.core_session_no_response, effectiveHerdrSession))
+                _sessionPicker.value = _sessionPicker.value.copy(switchingTo = null, error = App.str(R.string.core_picker_no_response))
                 return
             }
             Log.w(TAG, "herdr API not ready; falling back to the herdr TUI")
@@ -607,7 +608,7 @@ class SshTerminalSession(
             }
             if (info == null) {
                 if (!c.isConnected) throw java.io.IOException("SSH connection lost")
-                throw MoshUnavailable("mosh-server が見つかりません(MOSH CONNECT なし): " + out.trim().takeLast(120))
+                throw MoshUnavailable(App.str(R.string.core_mosh_server_missing, out.trim().takeLast(120)))
             }
             val i: MoshBootstrap.Info = info
             pid = i.pid
@@ -628,7 +629,7 @@ class SshTerminalSession(
             Log.w(TAG, "mosh ${slot.paneId} failed: ${e.message}")
             closeOrKill(ch, hostId, pid)
             slot.moshFailed = true
-            if (!moshNoticeShown && _notices.tryEmit("Mosh を使えないため SSH で接続します: ${e.message}")) moshNoticeShown = true
+            if (!moshNoticeShown && _notices.tryEmit(App.str(R.string.core_mosh_fallback, e.message.toString()))) moshNoticeShown = true
             return null
         } catch (e: Exception) {
             closeOrKill(ch, hostId, pid) // SSH transport error: regular retry, pane not marked
@@ -728,7 +729,7 @@ class SshTerminalSession(
 
     private fun onTransportClosed() {
         if (_state.value is ConnState.Connected) {
-            _state.value = ConnState.Disconnected("接続が切れました")
+            _state.value = ConnState.Disconnected(App.str(R.string.core_connection_lost))
         }
         herdr?.detach()
         closeTransport(keepMosh = true)

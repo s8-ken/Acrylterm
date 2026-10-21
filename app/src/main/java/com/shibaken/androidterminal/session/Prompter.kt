@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.session
 
+import com.shibaken.androidterminal.R
+import com.shibaken.androidterminal.App
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -55,7 +57,7 @@ object Prompter {
         val d = CompletableDeferred<Boolean>()
         return ask({
             PromptRequest.HostKey(
-                if (previous == null) "未知のホスト" else "ホスト鍵が変わっています",
+                if (previous == null) App.str(R.string.core_hostkey_unknown) else App.str(R.string.core_hostkey_changed),
                 host, keyType, fingerprint, previous, it,
             )
         }, d)

@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.herdr
 
+import com.shibaken.androidterminal.R
+import com.shibaken.androidterminal.App
 import android.util.Log
 import com.shibaken.androidterminal.data.AppJson
 import com.shibaken.androidterminal.ssh.RemoteCommand
@@ -126,7 +128,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
         loopJob?.cancel()
         loopJob = null
         client = null
-        _state.update { (if (resetState) HerdrState() else it).copy(phase = HerdrState.Phase.IDLE, message = "切断されました") }
+        _state.update { (if (resetState) HerdrState() else it).copy(phase = HerdrState.Phase.IDLE, message = App.str(R.string.core_disconnected)) }
     }
 
     fun dispose() {
@@ -146,7 +148,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
             "\${HERDR_SOCKET_PATH:-$base/herdr.sock}"
         }
         val path = conn.exec("printf '%s' \"$expr\"")
-        if (!path.startsWith("/")) throw IOException("ソケットパスを取得できませんでした: $path")
+        if (!path.startsWith("/")) throw IOException(App.str(R.string.core_socket_path_failed, path))
         return path
     }
 
@@ -155,8 +157,8 @@ class HerdrController(private val alerts: AgentAlertListener) {
         var socketPath: String? = knownSocketPath
         while (currentCoroutineContext().isActive) {
             try {
-                _state.update { it.copy(phase = HerdrState.Phase.CONNECTING, message = "接続中…") }
-                if (!conn.isConnected) throw IOException("SSH が切断されています")
+                _state.update { it.copy(phase = HerdrState.Phase.CONNECTING, message = App.str(R.string.core_connecting)) }
+                if (!conn.isConnected) throw IOException(App.str(R.string.core_ssh_disconnected))
                 val path = socketPath ?: resolveSocketPath(conn, herdrSession).also { socketPath = it }
                 val c = HerdrClient(conn, path)
                 val pong = c.call("ping")
@@ -166,7 +168,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
                 backoff = 1_000L
                 _state.update { it.copy(version = version) }
                 runSession(c, version)
-                throw IOException("イベント購読が終了しました")
+                throw IOException(App.str(R.string.core_events_ended))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -175,7 +177,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
                 cancelInteractiveOperations()
                 deferredCloses.cancelAll()
                 val msg = when {
-                    e is HerdrException && e.code == "unreachable" -> "サーバーが起動していません(起動を待っています)"
+                    e is HerdrException && e.code == "unreachable" -> App.str(R.string.core_server_not_running)
                     else -> e.message ?: e.toString()
                 }
                 Log.w(TAG, "herdr loop: $msg", e)
@@ -215,7 +217,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
                     backoff = RESYNC_MIN_MS
                     rapidFailures = 0
                 } else {
-                    if (++rapidFailures >= RESYNC_MAX_RAPID) throw IOException("イベント購読が繰り返し切断されました")
+                    if (++rapidFailures >= RESYNC_MAX_RAPID) throw IOException(App.str(R.string.core_events_repeated))
                     backoff = (backoff * 2).coerceAtMost(RESYNC_MAX_MS)
                 }
                 delay(backoff)
@@ -307,8 +309,8 @@ class HerdrController(private val alerts: AgentAlertListener) {
 
     private fun act(method: String, params: JsonObject, after: (JsonObject) -> Unit = {}) {
         val c = client ?: run {
-            _state.update { it.copy(message = "接続されていません") }
-            _errors.tryEmit("操作に失敗しました: 接続されていません")
+            _state.update { it.copy(message = App.str(R.string.core_not_connected)) }
+            _errors.tryEmit(App.str(R.string.core_op_failed_not_connected))
             return
         }
         scope.launch {
@@ -321,7 +323,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
             } catch (e: Exception) {
                 if (client !== c) return@launch
                 Log.w(TAG, "$method failed: ${e.message}", e)
-                _state.update { it.copy(message = "操作に失敗しました") }
+                _state.update { it.copy(message = App.str(R.string.core_op_failed)) }
                 _errors.tryEmit(failureText(e))
             }
         }
@@ -375,14 +377,14 @@ class HerdrController(private val alerts: AgentAlertListener) {
         val close = PendingTabClose(tabId, tab.title, visible.focusedTabId == tabId, next?.tabId)
         if (!deferredCloses.request(close) {
             if (capturedClient == null || client !== capturedClient) {
-                _errors.tryEmit("タブを閉じられませんでした: 接続されていません")
+                _errors.tryEmit(App.str(R.string.core_tab_close_not_connected))
                 false
             } else try {
                 capturedClient.call("tab.close", buildJsonObject { put("tab_id", tabId) })
                 true
             } catch (e: TimeoutCancellationException) {
                 currentCoroutineContext().ensureActive()
-                _errors.tryEmit("タブを閉じられませんでした: 応答がタイムアウトしました")
+                _errors.tryEmit(App.str(R.string.core_tab_close_timeout))
                 false
             } catch (e: CancellationException) {
                 throw e
@@ -412,7 +414,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
         operationGeneration++
         creationJob?.cancel(); creationJob = null
         bulkJob?.cancel(); bulkJob = null
-        if (_bulkClosing.value) _errors.tryEmit("接続が変更されたため一括終了を中断しました。一部は既に終了している可能性があります。")
+        if (_bulkClosing.value) _errors.tryEmit(App.str(R.string.core_bulk_aborted))
         _workspaceRequired.value = false
         _pendingTrust.value = null
         _pendingGroupClose.value = null
@@ -423,7 +425,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
 
     private fun launchCreation(timeoutMs: Long = 10_000, action: suspend (HerdrRpc) -> TabCreationOutcome) = synchronized(operationLock) {
         if (_creationBusy.value || _bulkClosing.value) return@synchronized
-        val c = client ?: run { _errors.tryEmit("操作に失敗しました: 接続されていません"); return@synchronized }
+        val c = client ?: run { _errors.tryEmit(App.str(R.string.core_op_failed_not_connected)); return@synchronized }
         val generation = ++operationGeneration
         _creationBusy.value = true
         creationJob = scope.launch {
@@ -436,7 +438,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
                 }
             } catch (error: TimeoutCancellationException) {
                 currentCoroutineContext().ensureActive()
-                if (client === c) _errors.tryEmit("操作に失敗しました: 応答がタイムアウトしました")
+                if (client === c) _errors.tryEmit(App.str(R.string.core_op_failed_timeout))
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
@@ -460,7 +462,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
     /** Creates a tab, then starts [kind] in its root pane without holding the creation flag (agent.start can take ~30s). */
     fun newAgentTab(kind: String, workspaceId: String? = _state.value.focusedWorkspaceId) {
         if (_creationBusy.value || _bulkClosing.value) return
-        val c = client ?: run { _errors.tryEmit("操作に失敗しました: 接続されていません"); return }
+        val c = client ?: run { _errors.tryEmit(App.str(R.string.core_op_failed_not_connected)); return }
         val noWorkspaces = _state.value.workspaces.isEmpty()
         launchCreation { rpc ->
             val r = requestNewTabWithPane(workspaceId, noWorkspaces, rpc)
@@ -496,7 +498,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
 
     /** Lists worktrees of [workspaceId]'s repository. Throws [HerdrException]; check [isTrustError] via [needsTrust]. */
     suspend fun listWorktrees(workspaceId: String, trust: Boolean = false): List<WorktreeEntry> {
-        val c = client ?: throw IOException("接続されていません")
+        val c = client ?: throw IOException(App.str(R.string.core_not_connected))
         return parseWorktrees(c.call("worktree.list", worktreeListParams(workspaceId, trust)))
     }
 
@@ -520,7 +522,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
 
     /** Closes one workspace; if it has linked worktree workspaces, asks via [pendingGroupClose] before closing them too. */
     fun closeWorkspace(workspaceId: String, group: Boolean = false) {
-        val c = client ?: run { _errors.tryEmit("操作に失敗しました: 接続されていません"); return }
+        val c = client ?: run { _errors.tryEmit(App.str(R.string.core_op_failed_not_connected)); return }
         _pendingGroupClose.value = null
         scope.launch {
             try {
@@ -556,7 +558,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
 
     fun closeAllConfirmed(plan: BulkClosePlan) = synchronized(operationLock) {
         if (_bulkClosing.value || _creationBusy.value || plan.ids.isEmpty()) return@synchronized
-        val c = client ?: run { _errors.tryEmit("一括終了に失敗しました: 接続されていません"); return@synchronized }
+        val c = client ?: run { _errors.tryEmit(App.str(R.string.core_bulk_not_connected)); return@synchronized }
         val generation = ++operationGeneration
         _bulkClosing.value = true
         _bulkCloseResult.value = null
@@ -616,8 +618,8 @@ class HerdrController(private val alerts: AgentAlertListener) {
         val c = client
         val frozenKeys = keys.toList()
         return inputQueue.enqueue(paneId) {
-            if (c == null) throw IOException("接続されていません")
-            if (client !== c) throw IOException("接続が切り替わりました")
+            if (c == null) throw IOException(App.str(R.string.core_not_connected))
+            if (client !== c) throw IOException(App.str(R.string.core_connection_switched))
             sendPaneInput(HerdrRpc { method, params -> c.call(method, params) }, paneId, text, frozenKeys, raw)
         }
     }
@@ -641,7 +643,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
             true
         } catch (e: TimeoutCancellationException) {
             currentCoroutineContext().ensureActive()
-            _errors.tryEmit("操作に失敗しました: 応答がタイムアウトしました")
+            _errors.tryEmit(App.str(R.string.core_op_failed_timeout))
             false
         } catch (e: CancellationException) {
             throw e
@@ -654,7 +656,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
 
     private fun failureText(e: Exception): String {
         val reason = e.message?.lineSequence()?.firstOrNull()?.take(60)?.takeIf { it.isNotBlank() }
-        return if (reason != null) "操作に失敗しました: $reason" else "操作に失敗しました"
+        return if (reason != null) App.str(R.string.core_op_failed_reason, reason) else App.str(R.string.core_op_failed)
     }
 
     private val lastScrollFix = HashMap<String, Long>()
@@ -697,7 +699,7 @@ class HerdrController(private val alerts: AgentAlertListener) {
 
     /** Reads the last lines of a pane (for previews). */
     suspend fun readPane(paneId: String, lines: Int = 40): String {
-        val c = client ?: throw IOException("接続されていません")
+        val c = client ?: throw IOException(App.str(R.string.core_not_connected))
         val r = c.call("pane.read", buildJsonObject {
             put("pane_id", paneId)
             put("source", "recent")

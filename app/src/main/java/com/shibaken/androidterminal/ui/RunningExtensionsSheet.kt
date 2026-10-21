@@ -1,6 +1,8 @@
 package com.shibaken.androidterminal.ui
 
 import androidx.compose.foundation.background
+import com.shibaken.androidterminal.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -68,14 +70,14 @@ fun RunningExtensionsSheet(ext: SessionExt, session: SshTerminalSession, app: Ap
                     Icon(Icons.Filled.Code, null, tint = CyanVeil.Cyan)
                 }
                 Column(Modifier.weight(1f)) {
-                    Text("拡張一覧", fontSize = 23.sp, fontWeight = FontWeight.Medium)
-                    Text(profile.displayName + " のみ切り替え", color = CyanVeil.Muted, fontSize = 11.sp)
+                    Text(stringResource(R.string.ext_list_title), fontSize = 23.sp, fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.ext_toggle_only_host, profile.displayName), color = CyanVeil.Muted, fontSize = 11.sp)
                 }
                 StatusPill("${entries.count { it.loadName !in disabled } + templateEntries.size} / ${entries.size + templateEntries.size}")
             }
-            if (entries.isEmpty() && templateEntries.isEmpty()) Text("拡張はありません", color = CyanVeil.Muted, fontSize = 14.sp)
+            if (entries.isEmpty() && templateEntries.isEmpty()) Text(stringResource(R.string.ext_none), color = CyanVeil.Muted, fontSize = 14.sp)
             if (profile.extLoadFromHost && hostEntries.isNotEmpty()) {
-                SectionLabel("このホスト")
+                SectionLabel(stringResource(R.string.ext_section_host))
                 hostEntries.forEach { e ->
                     ExtRow(e, e.loadName !in disabled, errors[e.loadName],
                         deleteEnabled = connected,
@@ -83,7 +85,7 @@ fun RunningExtensionsSheet(ext: SessionExt, session: SshTerminalSession, app: Ap
                 }
             }
             if (globalEntries.isNotEmpty()) {
-                SectionLabel("全体")
+                SectionLabel(stringResource(R.string.ext_section_global))
                 globalEntries.forEach { e ->
                     ExtRow(e, e.loadName !in disabled, errors[e.loadName],
                         deleteEnabled = true,
@@ -91,7 +93,7 @@ fun RunningExtensionsSheet(ext: SessionExt, session: SshTerminalSession, app: Ap
                 }
             }
             if (templateEntries.isNotEmpty()) {
-                SectionLabel("テンプレート(全ホスト共通)")
+                SectionLabel(stringResource(R.string.ext_section_templates))
                 templateEntries.forEach { e ->
                     ExtRow(e, true, errors[e.loadName], deleteEnabled = false, showDelete = false,
                         onToggle = { on ->
@@ -107,16 +109,16 @@ fun RunningExtensionsSheet(ext: SessionExt, session: SshTerminalSession, app: Ap
         val host = e.scope == ScriptStore.Scope.HOST
         AlertDialog(onDismissRequest = { confirmDelete = null }, containerColor = CyanVeil.Surface,
             title = { Text(e.fileName, fontFamily = FontFamily.Monospace, fontSize = 18.sp) },
-            text = { Text(if (host) "PC 上の ${e.fileName} を削除します" else "全体の拡張です。すべてのホストから削除されます") },
+            text = { Text(if (host) stringResource(R.string.ext_delete_host_confirm, e.fileName) else stringResource(R.string.ext_delete_global_confirm)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = null
                     scope.launch {
                         if (host) ext.deleteHostScript(e.fileName) else ext.deleteGlobalScript(e.fileName)
                     }
-                }) { Text("削除", color = CyanVeil.Rose) }
+                }) { Text(stringResource(R.string.ext_delete), color = CyanVeil.Rose) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("キャンセル") } })
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(stringResource(R.string.ext_cancel)) } })
     }
 }
 
@@ -137,6 +139,7 @@ private fun ExtRow(
 ) {
     val summary = remember(e.source) { ExtSummary.parse(e.source) }
     var expanded by remember { mutableStateOf(false) }
+    val toggleDesc = stringResource(R.string.ext_toggle_named, e.fileName)
     val line = summary.summary.orEmpty()
     VeilCard(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 2.dp)) {
@@ -148,10 +151,10 @@ private fun ExtRow(
                     if (summary.summary != null) Text(line, color = CyanVeil.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     ExtTags(summary, Modifier.padding(top = 4.dp))
                 }
-                if (error != null && enabled) StatusPill("エラー", CyanVeil.Rose)
-                Switch(enabled, onToggle, modifier = Modifier.semantics { contentDescription = "${e.fileName} の有効/無効" })
+                if (error != null && enabled) StatusPill(stringResource(R.string.ext_error), CyanVeil.Rose)
+                Switch(enabled, onToggle, modifier = Modifier.semantics { contentDescription = toggleDesc })
                 if (showDelete) IconButton(onClick = onDelete, enabled = deleteEnabled) {
-                    Icon(Icons.Filled.Delete, "${e.fileName} を削除", tint = if (deleteEnabled) CyanVeil.Muted else CyanVeil.Border)
+                    Icon(Icons.Filled.Delete, stringResource(R.string.ext_delete_named, e.fileName), tint = if (deleteEnabled) CyanVeil.Muted else CyanVeil.Border)
                 }
             }
             if (expanded) {

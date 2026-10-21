@@ -68,8 +68,8 @@ class SessionManager(private val app: App) {
         val who = pane.agentName ?: pane.title2
         val where = listOfNotNull(ws?.title, session.profile.displayName).joinToString(" · ")
         val text = when (status) {
-            AgentStatus.BLOCKED -> "$who が入力を待っています" + (pane.stateLabels[status]?.let { "($it)" } ?: "")
-            else -> "$who の作業が完了しました"
+            AgentStatus.BLOCKED -> app.getString(R.string.core_agent_waiting, who) + (pane.stateLabels[status]?.let { "($it)" } ?: "")
+            else -> app.getString(R.string.core_agent_finished, who)
         }
         post(session, text, where, pane.paneId, status == AgentStatus.BLOCKED)
     }

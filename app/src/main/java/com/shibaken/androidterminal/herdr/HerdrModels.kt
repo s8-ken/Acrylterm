@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.herdr
 
+import com.shibaken.androidterminal.R
+import com.shibaken.androidterminal.App
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
@@ -13,10 +15,10 @@ object AgentStatus {
     const val UNKNOWN = "unknown"
 
     fun label(s: String?): String = when (s) {
-        IDLE -> "待機"
-        WORKING -> "作業中"
-        BLOCKED -> "入力待ち"
-        DONE -> "完了"
+        IDLE -> App.str(R.string.core_agent_idle)
+        WORKING -> App.str(R.string.core_agent_working)
+        BLOCKED -> App.str(R.string.core_agent_blocked)
+        DONE -> App.str(R.string.core_agent_done)
         else -> ""
     }
 }

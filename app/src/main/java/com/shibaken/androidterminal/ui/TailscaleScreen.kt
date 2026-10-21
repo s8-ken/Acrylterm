@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.ui
 
+import androidx.compose.ui.res.stringResource
+import com.shibaken.androidterminal.R
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -68,7 +70,7 @@ fun TailscaleScreen(onBack: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text("Tailscale") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "戻る") } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.settings_back)) } },
             )
         },
     ) { padding ->
@@ -80,9 +82,7 @@ fun TailscaleScreen(onBack: () -> Unit) {
             if (!app.tailscale.available) {
                 item {
                     Text(
-                        "このビルドには Tailscale が組み込まれていません。\n" +
-                            "リポジトリの tsbridge/build.sh を実行して app/libs/tsbridge.aar を作り、もう一度ビルドしてください。\n" +
-                            "それまでは端末の Tailscale アプリ(VPN)経由で接続できます(ホスト設定で「Tailscale 経由」をオフ)。",
+                        stringResource(R.string.settings_tailscale_not_built),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -102,7 +102,7 @@ fun TailscaleScreen(onBack: () -> Unit) {
                             Spacer(Modifier.width(10.dp))
                             Text(stateLabel(ts.backendState), style = MaterialTheme.typography.titleMedium)
                         }
-                        if (ts.selfDNSName.isNotBlank()) Text("この端末: ${ts.selfDNSName.trimEnd('.')}", style = MaterialTheme.typography.bodySmall)
+                        if (ts.selfDNSName.isNotBlank()) Text(stringResource(R.string.settings_tailscale_this_device, ts.selfDNSName.trimEnd('.')), style = MaterialTheme.typography.bodySmall)
                         if (ts.tailscaleIPs.isNotEmpty()) Text(ts.tailscaleIPs.joinToString("  "), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                         ts.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                         ts.health.forEach { Text("⚠ $it", style = MaterialTheme.typography.bodySmall, color = StatusColors.blocked) }
@@ -113,10 +113,10 @@ fun TailscaleScreen(onBack: () -> Unit) {
             if (ts.authURL.isNotBlank()) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("ブラウザで tailnet にログインして、この端末を承認してください。")
+                        Text(stringResource(R.string.settings_tailscale_login_prompt))
                         Button(onClick = {
                             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ts.authURL)))
-                        }) { Text("ブラウザでログイン") }
+                        }) { Text(stringResource(R.string.settings_tailscale_login_browser)) }
                     }
                 }
             }
@@ -124,26 +124,26 @@ fun TailscaleScreen(onBack: () -> Unit) {
             if (!ts.running) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("アプリ内に Tailscale ノードを起動します。端末の VPN 枠は使わないので、公式アプリと併用できます。", style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.settings_tailscale_intro), style = MaterialTheme.typography.bodySmall)
                         OutlinedTextField(
-                            authKey, { authKey = it }, label = { Text("認証キー(任意: tskey-auth-…)") }, singleLine = true,
+                            authKey, { authKey = it }, label = { Text(stringResource(R.string.settings_tailscale_authkey_label)) }, singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        Button(onClick = { app.tailscale.start(authKey.trim().ifBlank { null }) }) { Text("Tailscale を開始") }
+                        Button(onClick = { app.tailscale.start(authKey.trim().ifBlank { null }) }) { Text(stringResource(R.string.settings_tailscale_start)) }
                     }
                 }
             } else {
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { app.tailscale.stop() }) { Text("停止") }
-                        OutlinedButton(onClick = { app.tailscale.logout() }) { Text("ログアウト") }
-                        TextButton(onClick = { showLogs = !showLogs }) { Text(if (showLogs) "ログを隠す" else "ログ") }
+                        OutlinedButton(onClick = { app.tailscale.stop() }) { Text(stringResource(R.string.settings_tailscale_stop)) }
+                        OutlinedButton(onClick = { app.tailscale.logout() }) { Text(stringResource(R.string.settings_tailscale_logout)) }
+                        TextButton(onClick = { showLogs = !showLogs }) { Text(if (showLogs) stringResource(R.string.settings_tailscale_hide_logs) else stringResource(R.string.settings_tailscale_logs)) }
                     }
                 }
             }
 
             if (ts.peers.isNotEmpty()) {
-                item { Text("デバイス", style = MaterialTheme.typography.labelLarge) }
+                item { Text(stringResource(R.string.settings_tailscale_devices), style = MaterialTheme.typography.labelLarge) }
                 items(ts.peers, key = { it.dnsName.ifBlank { it.hostName } }) { p ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(8.dp).clip(CircleShape).background(if (p.online) StatusColors.done else StatusColors.idle))
@@ -165,12 +165,13 @@ fun TailscaleScreen(onBack: () -> Unit) {
     }
 }
 
+@Composable
 private fun stateLabel(s: String): String = when (s) {
-    "Running" -> "接続済み"
-    "NeedsLogin" -> "ログインが必要"
-    "NeedsMachineAuth" -> "管理者の承認待ち"
-    "Starting" -> "接続中…"
-    "Stopped" -> "停止中"
-    "NoState" -> "起動中…"
+    "Running" -> stringResource(R.string.settings_tailscale_state_running)
+    "NeedsLogin" -> stringResource(R.string.settings_tailscale_state_needs_login)
+    "NeedsMachineAuth" -> stringResource(R.string.settings_tailscale_state_needs_machine_auth)
+    "Starting" -> stringResource(R.string.settings_tailscale_state_starting)
+    "Stopped" -> stringResource(R.string.settings_tailscale_state_stopped)
+    "NoState" -> stringResource(R.string.settings_tailscale_state_no_state)
     else -> s
 }

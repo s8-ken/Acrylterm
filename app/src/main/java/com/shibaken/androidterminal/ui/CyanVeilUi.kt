@@ -1,5 +1,6 @@
 package com.shibaken.androidterminal.ui
 
+import androidx.compose.ui.res.stringResource
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
@@ -97,7 +98,7 @@ fun VeilPageHeader(title: String, onBack: () -> Unit, subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {}) {
     Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        VeilIconButton(R.drawable.veil_back, "戻る", onBack)
+        VeilIconButton(R.drawable.veil_back, stringResource(R.string.term_back), onBack)
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 23.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (subtitle != null) Text(subtitle, color = CyanVeil.Muted, fontSize = 11.sp,

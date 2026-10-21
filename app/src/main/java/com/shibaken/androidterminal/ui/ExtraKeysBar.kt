@@ -1,5 +1,6 @@
 package com.shibaken.androidterminal.ui
 
+import androidx.compose.ui.res.stringResource
 import android.view.KeyEvent
 import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.background
@@ -58,15 +59,16 @@ fun ExtraKeysBar(
     showExtCreate: Boolean = false,
     onExtCreate: () -> Unit = {},
 ) {
+    val extraKeysDesc = stringResource(R.string.term_extra_keys)
     Row(
         Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp)
-            .semantics { contentDescription = "補助キー" },
+            .semantics { contentDescription = extraKeysDesc },
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Key("⌨", desc = "キーボードの表示/非表示", modifier = Modifier.weight(1f), onTap = onKeyboard)
+        Key("⌨", desc = stringResource(R.string.term_keyboard_toggle), modifier = Modifier.weight(1f), onTap = onKeyboard)
         Key("ESC", modifier = Modifier.weight(1f)) { view.sendKey(KeyEvent.KEYCODE_ESCAPE) }
         Key("TAB", modifier = Modifier.weight(1f)) { view.sendKey(KeyEvent.KEYCODE_TAB) }
         ModifierKey("CTRL", active = ctrlOn, held = ctrlHeld, modifier = Modifier.weight(1f), onTap = onCtrl)
@@ -88,12 +90,13 @@ private fun MiniKeysRow(
     showExtCreate: Boolean,
     onExtCreate: () -> Unit,
 ) {
+    val moreKeysDesc = stringResource(R.string.term_more_keys)
     Row(
         Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
             .padding(bottom = 2.dp)
-            .semantics { contentDescription = "その他のキー" },
+            .semantics { contentDescription = moreKeysDesc },
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -104,12 +107,12 @@ private fun MiniKeysRow(
             "PGDN" to KeyEvent.KEYCODE_PAGE_DOWN,
         ).forEach { (label, code) -> MiniKey(label) { view.sendKey(code) } }
         listOf("|", "/", "-", "~").forEach { symbol -> MiniKey(symbol) { view.commitText(symbol) } }
-        if (showPrefixKey) MiniKey("^B", accent = true, desc = "プレフィックス Ctrl+B") { view.session?.sendText("\u0002") }
+        if (showPrefixKey) MiniKey("^B", accent = true, desc = stringResource(R.string.term_prefix_ctrl_b)) { view.session?.sendText("\u0002") }
         // マクロ = 拡張キー(keys.add)+ 拡張コマンド(command)。ユーザーには区別しない。
-        extKeys.forEachIndexed { index, label -> MiniKey("⚡$label", accent = true, desc = "マクロ: $label") { onExtKey(index) } }
-        extCommands.forEach { name -> MiniKey("⚡$name", accent = true, desc = "マクロ: $name") { onExtCommand(name) } }
-        if (showExtCreate) MiniKey(if (extKeys.isEmpty() && extCommands.isEmpty()) "＋ マクロを作る" else "＋", accent = true,
-            desc = "拡張を作る", onTap = onExtCreate)
+        extKeys.forEachIndexed { index, label -> MiniKey("⚡$label", accent = true, desc = stringResource(R.string.term_macro_desc, label)) { onExtKey(index) } }
+        extCommands.forEach { name -> MiniKey("⚡$name", accent = true, desc = stringResource(R.string.term_macro_desc, name)) { onExtCommand(name) } }
+        if (showExtCreate) MiniKey(if (extKeys.isEmpty() && extCommands.isEmpty()) stringResource(R.string.term_macro_create) else "＋", accent = true,
+            desc = stringResource(R.string.term_extension_create), onTap = onExtCreate)
     }
 }
 
@@ -182,13 +185,14 @@ private fun Key(label: String, active: Boolean = false, accent: Boolean = false,
 private fun ModifierKey(label: String, active: Boolean, held: Boolean, modifier: Modifier = Modifier, onTap: () -> Unit) {
     val hapticView = LocalView.current
     val foreground = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val modState = stringResource(when {
+        held -> R.string.term_mod_held
+        active -> R.string.term_mod_active
+        else -> R.string.term_mod_off
+    })
     KeyBox(label, label, active, false,
         modifier.semantics {
-            stateDescription = when {
-                held -> "HOLD、タップで解除"
-                active -> "次の1キーに適用、素早くもう1回タップでHOLD"
-                else -> "オフ、2回タップでHOLD"
-            }
+            stateDescription = modState
         }.clickable(role = Role.Button) {
             hapticView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             onTap()

@@ -124,7 +124,7 @@ class HerdrUiOperationsTest {
         }
         assertEquals(1, result.completed)
         assertEquals("a", result.failures.single().id)
-        assertTrue(result.failures.single().reason.contains("タイムアウト"))
+        assertEquals(R.string.core_bulk_timeout, result.failures.single().messageRes)
     }
 
     @Test fun cancellationStopsBeforeSendingFurtherCloses() = runBlocking {

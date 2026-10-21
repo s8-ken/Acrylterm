@@ -60,6 +60,9 @@ import com.shibaken.androidterminal.herdr.TabInfo
 import com.shibaken.androidterminal.herdr.WorkspaceInfo
 import com.shibaken.androidterminal.herdr.WorktreeEntry
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
+import com.shibaken.androidterminal.R
 
 /** Workspace → tab → pane tree with agent status; tap to focus. [title] is the host / session name. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -103,10 +106,10 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
                     if (showVersion && state.version.isNotBlank()) append("v${state.version}  ")
                     append(
                         when (state.phase) {
-                            HerdrState.Phase.READY -> "接続済み"
-                            HerdrState.Phase.CONNECTING -> "接続中…"
-                            HerdrState.Phase.ERROR -> "エラー"
-                            HerdrState.Phase.IDLE -> "未接続"
+                            HerdrState.Phase.READY -> stringResource(R.string.herdrui_phase_ready)
+                            HerdrState.Phase.CONNECTING -> stringResource(R.string.herdrui_phase_connecting)
+                            HerdrState.Phase.ERROR -> stringResource(R.string.herdrui_phase_error)
+                            HerdrState.Phase.IDLE -> stringResource(R.string.herdrui_phase_idle)
                         }
                     )
                 }
@@ -115,12 +118,12 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = { newWorkspace = true }) { Icon(Icons.Filled.Add, null); Text(" ワークスペース") }
+                    TextButton(onClick = { newWorkspace = true }) { Icon(Icons.Filled.Add, null); Text(" " + stringResource(R.string.herdrui_workspace)) }
                     // Tap = plain shell tab; the arrow opens the agent menu.
                     Box {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = { herdr.newTab(); onNavigated() }) { Icon(Icons.Filled.Add, null); Text(" タブ") }
-                            IconButton(onClick = { newTabMenu = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.ArrowDropDown, "タブの種類") }
+                            TextButton(onClick = { herdr.newTab(); onNavigated() }) { Icon(Icons.Filled.Add, null); Text(" " + stringResource(R.string.herdrui_tab)) }
+                            IconButton(onClick = { newTabMenu = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.ArrowDropDown, stringResource(R.string.herdrui_tab_type)) }
                         }
                         NewTabMenu(newTabMenu, { newTabMenu = false }, herdr, state.focusedWorkspaceId, onNavigated)
                     }
@@ -146,7 +149,7 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
                             Text(ws.title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             if (ws.worktree?.isLinkedWorktree == true) {
                                 Spacer(Modifier.width(6.dp))
-                                Icon(Icons.Outlined.AccountTree, "ワークツリー", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Icon(Icons.Outlined.AccountTree, stringResource(R.string.herdrui_worktree), Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                         ws.worktree?.repoName?.takeIf { it.isNotBlank() }?.let {
@@ -156,10 +159,10 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
                     Text("${ws.number}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     var wsMenu by remember { mutableStateOf(false) }
                     Box {
-                        IconButton(onClick = { wsMenu = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.MoreVert, "ワークスペースの操作") }
+                        IconButton(onClick = { wsMenu = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.MoreVert, stringResource(R.string.herdrui_workspace_actions)) }
                         DropdownMenu(wsMenu, { wsMenu = false }) {
-                            DropdownMenuItem(text = { Text("名前を変更") }, onClick = { wsMenu = false; renamingWs = ws })
-                            DropdownMenuItem(text = { Text("閉じる") }, onClick = { wsMenu = false; closingWs = ws })
+                            DropdownMenuItem(text = { Text(stringResource(R.string.herdrui_rename)) }, onClick = { wsMenu = false; renamingWs = ws })
+                            DropdownMenuItem(text = { Text(stringResource(R.string.herdrui_close)) }, onClick = { wsMenu = false; closingWs = ws })
                         }
                     }
                 }
@@ -211,33 +214,33 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
         var label by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { newWorkspace = false },
-            title = { Text("新しいワークスペース") },
-            text = { OutlinedTextField(label, { label = it }, label = { Text("名前(任意)") }, singleLine = true) },
+            title = { Text(stringResource(R.string.herdrui_new_workspace)) },
+            text = { OutlinedTextField(label, { label = it }, label = { Text(stringResource(R.string.herdrui_name_optional)) }, singleLine = true) },
             confirmButton = {
-                TextButton(onClick = { herdr.newWorkspace(label); newWorkspace = false; onNavigated() }) { Text("作成") }
+                TextButton(onClick = { herdr.newWorkspace(label); newWorkspace = false; onNavigated() }) { Text(stringResource(R.string.herdrui_create)) }
             },
-            dismissButton = { TextButton(onClick = { newWorkspace = false }) { Text("キャンセル") } },
+            dismissButton = { TextButton(onClick = { newWorkspace = false }) { Text(stringResource(R.string.herdrui_cancel)) } },
         )
     }
     closing?.let { p ->
         AlertDialog(
             onDismissRequest = { closing = null },
-            title = { Text("ペインを閉じる") },
-            text = { Text("「${p.title2}」を閉じます。実行中のプロセスは終了します。") },
-            confirmButton = { TextButton(onClick = { herdr.closePane(p.paneId); closing = null }) { Text("閉じる") } },
-            dismissButton = { TextButton(onClick = { closing = null }) { Text("キャンセル") } },
+            title = { Text(stringResource(R.string.herdrui_close_pane_title)) },
+            text = { Text(stringResource(R.string.herdrui_close_pane_body, p.title2)) },
+            confirmButton = { TextButton(onClick = { herdr.closePane(p.paneId); closing = null }) { Text(stringResource(R.string.herdrui_close)) } },
+            dismissButton = { TextButton(onClick = { closing = null }) { Text(stringResource(R.string.herdrui_cancel)) } },
         )
     }
-    renaming?.let { p -> RenameDialog("ペイン名を変更", p.label ?: "", { herdr.renamePane(p.paneId, it) }, { renaming = null }) }
-    renamingTab?.let { t -> RenameDialog("タブ名を変更", t.label, { herdr.renameTab(t.tabId, it) }, { renamingTab = null }) }
-    renamingWs?.let { w -> RenameDialog("ワークスペース名を変更", w.label, { herdr.renameWorkspace(w.workspaceId, it) }, { renamingWs = null }) }
+    renaming?.let { p -> RenameDialog(stringResource(R.string.herdrui_rename_pane_title), p.label ?: "", { herdr.renamePane(p.paneId, it) }, { renaming = null }) }
+    renamingTab?.let { t -> RenameDialog(stringResource(R.string.herdrui_rename_tab_title), t.label, { herdr.renameTab(t.tabId, it) }, { renamingTab = null }) }
+    renamingWs?.let { w -> RenameDialog(stringResource(R.string.herdrui_rename_workspace_title), w.label, { herdr.renameWorkspace(w.workspaceId, it) }, { renamingWs = null }) }
     closingWs?.let { w ->
         AlertDialog(
             onDismissRequest = { closingWs = null },
-            title = { Text("ワークスペースを閉じる") },
-            text = { Text("「${w.title}」を閉じます。実行中のプロセスは終了します。") },
-            confirmButton = { TextButton(onClick = { herdr.closeWorkspace(w.workspaceId); closingWs = null }) { Text("閉じる") } },
-            dismissButton = { TextButton(onClick = { closingWs = null }) { Text("キャンセル") } },
+            title = { Text(stringResource(R.string.herdrui_close_workspace_title)) },
+            text = { Text(stringResource(R.string.herdrui_close_workspace_body, w.title)) },
+            confirmButton = { TextButton(onClick = { herdr.closeWorkspace(w.workspaceId); closingWs = null }) { Text(stringResource(R.string.herdrui_close)) } },
+            dismissButton = { TextButton(onClick = { closingWs = null }) { Text(stringResource(R.string.herdrui_cancel)) } },
         )
     }
     preview?.let { p -> PanePreviewDialog(p, herdr, onDismiss = { preview = null }, onFocus = { herdr.focusPane(p.paneId); preview = null; onNavigated() }) }
@@ -247,7 +250,7 @@ fun HerdrDrawerContent(state: HerdrState, herdr: HerdrController, title: String,
 private fun WorktreeHeader() {
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         HorizontalDivider(Modifier.padding(start = 32.dp, end = 16.dp))
-        Text("ワークツリー", Modifier.padding(start = 32.dp, top = 8.dp), style = MaterialTheme.typography.labelMedium,
+        Text(stringResource(R.string.herdrui_worktree), Modifier.padding(start = 32.dp, top = 8.dp), style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -259,7 +262,7 @@ private fun UnopenedWorktreeRow(entry: WorktreeEntry, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .clickable(onClickLabel = "ワークツリーを開く", onClick = onClick)
+            .clickable(onClickLabel = stringResource(R.string.herdrui_open_worktree), onClick = onClick)
             .padding(start = 32.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -309,14 +312,14 @@ private fun PaneRow(
             }
         }
         Box {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "操作") }
+            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.herdrui_actions)) }
             DropdownMenu(menu, { menu = false }) {
-                DropdownMenuItem(text = { Text("内容をプレビュー") }, onClick = { menu = false; onPreview() })
+                DropdownMenuItem(text = { Text(stringResource(R.string.herdrui_preview_contents)) }, onClick = { menu = false; onPreview() })
                 if (pane.agentStatus == AgentStatus.BLOCKED) {
-                    DropdownMenuItem(text = { Text("Enter を送る(承認)") }, onClick = { menu = false; onEnter() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.herdrui_send_enter_approve)) }, onClick = { menu = false; onEnter() })
                 }
-                DropdownMenuItem(text = { Text("名前を変更") }, onClick = { menu = false; onRename() })
-                DropdownMenuItem(text = { Text("閉じる") }, onClick = { menu = false; onClose() })
+                DropdownMenuItem(text = { Text(stringResource(R.string.herdrui_rename)) }, onClick = { menu = false; onRename() })
+                DropdownMenuItem(text = { Text(stringResource(R.string.herdrui_close)) }, onClick = { menu = false; onClose() })
             }
         }
     }
@@ -336,11 +339,12 @@ fun StatusDot(status: String?) {
 private fun PanePreviewDialog(pane: PaneInfo, herdr: HerdrController, onDismiss: () -> Unit, onFocus: () -> Unit) {
     var text by remember { mutableStateOf<String?>(null) }
     var reply by remember { mutableStateOf("") }
+    val ctx = LocalContext.current
     LaunchedEffect(pane.paneId) {
         text = try {
             herdr.readPane(pane.paneId, 60)
         } catch (e: Exception) {
-            "読み込めませんでした: ${e.message}"
+            ctx.getString(R.string.herdrui_load_failed, e.message.orEmpty())
         }
     }
     AlertDialog(
@@ -356,12 +360,12 @@ private fun PanePreviewDialog(pane: PaneInfo, herdr: HerdrController, onDismiss:
                         .verticalScroll(rememberScrollState(Int.MAX_VALUE))
                         .padding(8.dp)
                 ) {
-                    Text(text ?: "読み込み中…", fontFamily = FontFamily.Monospace, fontSize = 10.sp, lineHeight = 12.sp)
+                    Text(text ?: stringResource(R.string.herdrui_loading), fontFamily = FontFamily.Monospace, fontSize = 10.sp, lineHeight = 12.sp)
                 }
                 Spacer(Modifier.width(8.dp))
                 OutlinedTextField(
                     reply, { reply = it },
-                    label = { Text("このペインに送信(Enter 付き)") },
+                    label = { Text(stringResource(R.string.herdrui_send_to_pane)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
@@ -370,12 +374,12 @@ private fun PanePreviewDialog(pane: PaneInfo, herdr: HerdrController, onDismiss:
         confirmButton = {
             Row {
                 if (reply.isNotEmpty()) {
-                    TextButton(onClick = { herdr.sendText(pane.paneId, reply, pressEnter = true); reply = ""; onDismiss() }) { Text("送信") }
+                    TextButton(onClick = { herdr.sendText(pane.paneId, reply, pressEnter = true); reply = ""; onDismiss() }) { Text(stringResource(R.string.herdrui_send)) }
                 }
-                TextButton(onClick = onFocus) { Text("このペインへ移動") }
+                TextButton(onClick = onFocus) { Text(stringResource(R.string.herdrui_go_to_pane)) }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.herdrui_close)) } },
     )
 }
 
@@ -387,8 +391,8 @@ internal fun RenameDialog(title: String, initial: String, onConfirm: (String) ->
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { OutlinedTextField(label, { label = it }, singleLine = true) },
-        confirmButton = { TextButton(onClick = { onConfirm(label); onDismiss() }, enabled = label.isNotBlank()) { Text("変更") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("キャンセル") } },
+        confirmButton = { TextButton(onClick = { onConfirm(label); onDismiss() }, enabled = label.isNotBlank()) { Text(stringResource(R.string.herdrui_change)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.herdrui_cancel)) } },
     )
 }
 
@@ -396,7 +400,7 @@ internal fun RenameDialog(title: String, initial: String, onConfirm: (String) ->
 @Composable
 internal fun NewTabMenu(expanded: Boolean, onDismiss: () -> Unit, herdr: HerdrController, workspaceId: String?, onNavigated: () -> Unit = {}) {
     DropdownMenu(expanded, onDismiss) {
-        DropdownMenuItem(text = { Text("シェル") }, onClick = { onDismiss(); herdr.newTab(workspaceId); onNavigated() })
+        DropdownMenuItem(text = { Text(stringResource(R.string.herdrui_shell)) }, onClick = { onDismiss(); herdr.newTab(workspaceId); onNavigated() })
         AGENT_KINDS.forEach { (kind, name) ->
             DropdownMenuItem(text = { Text(name) }, onClick = { onDismiss(); herdr.newAgentTab(kind, workspaceId); onNavigated() })
         }
@@ -411,17 +415,17 @@ fun HerdrPendingDialogs(herdr: HerdrController) {
     if (trust != null) {
         AlertDialog(
             onDismissRequest = { herdr.dismissTrust() },
-            title = { Text("このリポジトリを信頼して続行しますか？") },
-            confirmButton = { TextButton(onClick = { herdr.confirmTrust() }) { Text("信頼して続行") } },
-            dismissButton = { TextButton(onClick = { herdr.dismissTrust() }) { Text("キャンセル") } },
+            title = { Text(stringResource(R.string.herdrui_trust_title)) },
+            confirmButton = { TextButton(onClick = { herdr.confirmTrust() }) { Text(stringResource(R.string.herdrui_trust_confirm)) } },
+            dismissButton = { TextButton(onClick = { herdr.dismissTrust() }) { Text(stringResource(R.string.herdrui_cancel)) } },
         )
     }
     if (groupClose != null) {
         AlertDialog(
             onDismissRequest = { herdr.dismissGroupClose() },
-            title = { Text("紐づくワークツリーのワークスペースもまとめて閉じますか？") },
-            confirmButton = { TextButton(onClick = { herdr.confirmGroupClose() }) { Text("まとめて閉じる") } },
-            dismissButton = { TextButton(onClick = { herdr.dismissGroupClose() }) { Text("キャンセル") } },
+            title = { Text(stringResource(R.string.herdrui_group_close_title)) },
+            confirmButton = { TextButton(onClick = { herdr.confirmGroupClose() }) { Text(stringResource(R.string.herdrui_group_close_confirm)) } },
+            dismissButton = { TextButton(onClick = { herdr.dismissGroupClose() }) { Text(stringResource(R.string.herdrui_cancel)) } },
         )
     }
 }

@@ -1,6 +1,7 @@
 package com.shibaken.androidterminal.session
 
 import android.util.Log
+import com.shibaken.androidterminal.R
 import com.shibaken.androidterminal.App
 import com.shibaken.androidterminal.ext.ExtEngine
 import com.shibaken.androidterminal.ext.ExtHost
@@ -125,7 +126,7 @@ class SessionExt(
         override fun log(line: String) = appendLog(line)
     }
 
-    val engine = ExtEngine(host)
+    val engine = ExtEngine(host, errorToast = { app.getString(R.string.ext_engine_error, it) })
 
     private fun isPanes() = session.mode.value == SessionMode.PANES && session.herdr != null
 
@@ -252,10 +253,10 @@ class SessionExt(
         _loadErrors.value = errorsByScript(scripts.map { it.name }, r.errors)
         _loadRevision.value++
         if (r.ok) {
-            appendLog("読み込み完了: ${scripts.size} 本")
+            appendLog(app.resources.getQuantityString(R.plurals.ext_log_loaded, scripts.size, scripts.size))
         } else {
-            r.errors.forEach { appendLog("読み込みエラー: $it") }
-            session.postNotice("拡張の読み込みエラー: ${r.errors.first().take(100)}")
+            r.errors.forEach { appendLog(app.getString(R.string.ext_log_load_error, it)) }
+            session.postNotice(app.getString(R.string.ext_notice_load_error, r.errors.first().take(100)))
         }
     }
 
@@ -289,13 +290,13 @@ class SessionExt(
             val key = "host:$fileName"
             if (key in latest.extDisabled) app.hosts.save(latest.copy(extDisabled = latest.extDisabled - key))
             withContext(Dispatchers.IO) { try { app.scriptStore.deleteHost(latest.id, fileName) } catch (e: IllegalArgumentException) { false } }
-            appendLog("削除: $fileName")
+            appendLog(app.getString(R.string.ext_log_deleted, fileName))
             reload(c, fetch = latest.extLoadFromHost)
             true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            logOnce("削除", e)
+            logOnce(app.getString(R.string.ext_op_delete), e)
             false
         }
     }
@@ -314,7 +315,7 @@ class SessionExt(
         Log.w(TAG, "$what failed: ${e.message}")
         if (!syncErrorLogged) {
             syncErrorLogged = true
-            appendLog("$what に失敗: ${e.message ?: e.javaClass.simpleName}")
+            appendLog(app.getString(R.string.ext_log_op_failed, what, e.message ?: e.javaClass.simpleName))
         }
     }
 
@@ -335,7 +336,7 @@ class SessionExt(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            logOnce("書き込み", e)
+            logOnce(app.getString(R.string.ext_op_write), e)
         }
     }
 
@@ -371,15 +372,15 @@ class SessionExt(
         if (_genState.value is GenState.Running) return
         _genState.value = GenState.Running(name, request, agentCommand)
         scope.launch {
-            appendLog("生成を開始: $name")
+            appendLog(app.getString(R.string.ext_log_gen_start, name))
             fun fail(msg: String) {
-                appendLog("生成に失敗: $name ($msg)")
+                appendLog(app.getString(R.string.ext_log_gen_failed, name, msg))
                 _genState.value = GenState.Failed(name, msg, request, agentCommand)
-                notifyGenFinished("拡張の作成に失敗しました", msg.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().ifBlank { name })
+                notifyGenFinished(app.getString(R.string.ext_gen_failed_title), msg.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().ifBlank { name })
             }
             try {
                 val c = session.currentConn()?.takeIf { it.isConnected }
-                if (c == null) return@launch fail("未接続")
+                if (c == null) return@launch fail(app.getString(R.string.ext_err_not_connected))
                 val (existing, apiDoc) = withContext(Dispatchers.IO) {
                     app.scriptStore.readHost(session.profile.id, name) to loadApiDoc()
                 }
@@ -389,17 +390,17 @@ class SessionExt(
                 val out = c.execAll(com.shibaken.androidterminal.ssh.RemoteCommand.viaLoginShell(cmd), 300_000)
                 val r = ExtSync.parseGenerateOutput(out, nonce)
                 when {
-                    r.exitCode == null -> return@launch fail("時間切れ")
-                    r.exitCode != 0 -> return@launch fail("終了コード ${r.exitCode}: ${r.stderr.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().take(200)}")
+                    r.exitCode == null -> return@launch fail(app.getString(R.string.ext_err_timeout))
+                    r.exitCode != 0 -> return@launch fail(app.getString(R.string.ext_err_exit_code, r.exitCode.toString(), r.stderr.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().take(200)))
                 }
                 val code = ExtSync.extractLua(r.stdout)
-                if (code.isBlank()) return@launch fail("出力が空")
+                if (code.isBlank()) return@launch fail(app.getString(R.string.ext_err_empty_output))
                 for (w in ExtSync.writeScriptCommands(name, code)) c.execAll(w, 15_000)
                 reloadNow(fetch = true)
-                appendLog("生成完了: $name")
+                appendLog(app.getString(R.string.ext_log_gen_done, name))
                 val summary = ExtSummary.parse(code)
                 _genState.value = GenState.Done(name, summary)
-                notifyGenFinished("拡張を作成しました", summary.summary ?: name)
+                notifyGenFinished(app.getString(R.string.ext_gen_done_title), summary.summary ?: name)
             } catch (e: CancellationException) {
                 _genState.value = GenState.Idle
                 throw e

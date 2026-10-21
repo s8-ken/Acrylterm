@@ -64,6 +64,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.roundToInt
+import androidx.compose.ui.res.stringResource
+import com.shibaken.androidterminal.R
 
 /**
  * One [TerminalCanvasView] per pane id, kept across recompositions and tab switches so views are
@@ -267,7 +269,7 @@ fun PaneLayout(
                 onClick = { herdr.toggleZoom(focusedId) },
                 modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(36.dp)
                     .background(Color.Black.copy(alpha = 0.45f), CircleShape),
-            ) { Icon(Icons.Filled.ZoomInMap, "ズーム解除", Modifier.size(20.dp), tint = Color.White) }
+            ) { Icon(Icons.Filled.ZoomInMap, stringResource(R.string.herdrui_exit_zoom), Modifier.size(20.dp), tint = Color.White) }
         }
     }
 }
@@ -347,13 +349,14 @@ private fun PaneItem(
                 onClick = { view.exitHistory() },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp).size(40.dp)
                     .background(Color.Black.copy(alpha = 0.55f), CircleShape),
-            ) { Icon(Icons.Filled.KeyboardArrowDown, "最新へ", Modifier.size(24.dp), tint = Color.White) }
+            ) { Icon(Icons.Filled.KeyboardArrowDown, stringResource(R.string.herdrui_jump_latest), Modifier.size(24.dp), tint = Color.White) }
         }
         if (focused && !attached) {
             // Not attached yet: input would be dropped. Dim + small spinner (no text).
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
+            val connectingDesc = stringResource(R.string.herdrui_connecting_desc)
             CircularProgressIndicator(
-                Modifier.align(Alignment.TopEnd).padding(8.dp).size(18.dp).semantics { contentDescription = "接続中" },
+                Modifier.align(Alignment.TopEnd).padding(8.dp).size(18.dp).semantics { contentDescription = connectingDesc },
                 strokeWidth = 2.dp,
             )
         }

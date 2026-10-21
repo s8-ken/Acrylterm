@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.ui
 
+import com.shibaken.androidterminal.R
+import androidx.compose.ui.res.stringResource
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import androidx.compose.foundation.background
@@ -56,6 +58,12 @@ internal fun FlickKey(view: TerminalCanvasView, modifier: Modifier = Modifier) {
     var direction by remember(view) { mutableStateOf<FlickDirection?>(null) }
     val shape = RoundedCornerShape(12.dp)
     val active = direction != null
+    val keyDesc = stringResource(R.string.term_flick_key)
+    val keyState = stringResource(R.string.term_flick_key_state)
+    val leftLabel = stringResource(R.string.term_arrow_left)
+    val downLabel = stringResource(R.string.term_arrow_down)
+    val upLabel = stringResource(R.string.term_arrow_up)
+    val rightLabel = stringResource(R.string.term_arrow_right)
     fun fire(keyCode: Int) {
         hapticView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
         view.sendKey(keyCode)
@@ -66,14 +74,14 @@ internal fun FlickKey(view: TerminalCanvasView, modifier: Modifier = Modifier) {
             .border(1.dp, if (active) CyanVeil.Cyan else CyanVeil.Border, shape)
             .semantics {
                 role = Role.Button
-                contentDescription = "方向キー"
-                stateDescription = "上下左右にフリック、タップでEnter、方向を保つと連続入力"
+                contentDescription = keyDesc
+                stateDescription = keyState
                 onClick("Enter") { fire(KeyEvent.KEYCODE_ENTER); true }
                 customActions = listOf(
-                    CustomAccessibilityAction("左矢印") { fire(KeyEvent.KEYCODE_DPAD_LEFT); true },
-                    CustomAccessibilityAction("下矢印") { fire(KeyEvent.KEYCODE_DPAD_DOWN); true },
-                    CustomAccessibilityAction("上矢印") { fire(KeyEvent.KEYCODE_DPAD_UP); true },
-                    CustomAccessibilityAction("右矢印") { fire(KeyEvent.KEYCODE_DPAD_RIGHT); true },
+                    CustomAccessibilityAction(leftLabel) { fire(KeyEvent.KEYCODE_DPAD_LEFT); true },
+                    CustomAccessibilityAction(downLabel) { fire(KeyEvent.KEYCODE_DPAD_DOWN); true },
+                    CustomAccessibilityAction(upLabel) { fire(KeyEvent.KEYCODE_DPAD_UP); true },
+                    CustomAccessibilityAction(rightLabel) { fire(KeyEvent.KEYCODE_DPAD_RIGHT); true },
                 )
             }
             .pointerInput(view, hapticView) {

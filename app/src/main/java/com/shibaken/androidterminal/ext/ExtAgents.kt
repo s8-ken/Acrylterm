@@ -5,7 +5,7 @@ object ExtAgents {
     enum class Kind(val label: String, val command: String?) {
         CLAUDE("Claude", "claude -p"),
         CODEX("Codex", "codex exec --skip-git-repo-check -"),
-        CUSTOM("その他", null),
+        CUSTOM("Other", null),
     }
 
     /** [cmd] が完全一致するプリセット、無ければ [Kind.CUSTOM]。 */

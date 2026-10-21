@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.ui
 
+import androidx.compose.ui.res.stringResource
+import com.shibaken.androidterminal.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -95,21 +97,21 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
 
     VeilBackdrop(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().systemBarsPadding().imePadding().padding(horizontal = 20.dp)) {
-            VeilPageHeader(if (hostId == null) "ホストを追加" else "ホストを編集", onDone, actions = {
-                if (hostId != null) IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, "削除", tint = CyanVeil.Muted) }
+            VeilPageHeader(if (hostId == null) stringResource(R.string.settings_hostedit_add_title) else stringResource(R.string.settings_hostedit_edit_title), onDone, actions = {
+                if (hostId != null) IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, stringResource(R.string.settings_delete), tint = CyanVeil.Muted) }
                 FilledTonalButton(onClick = ::save, enabled = valid, shape = CircleShape,
-                    modifier = Modifier.heightIn(min = 48.dp)) { Text("保存") }
+                    modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.settings_hostedit_save)) }
             })
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("表示名(任意)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.settings_hostedit_display_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
-                    host, { host = it }, label = { Text("ホスト") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    supportingText = { Text(if (useTs) "MagicDNS 名 (mac-mini) か Tailscale IP (100.x.y.z)" else "IP アドレスまたはホスト名") },
+                    host, { host = it }, label = { Text(stringResource(R.string.settings_hostedit_host)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    supportingText = { Text(if (useTs) stringResource(R.string.settings_hostedit_host_hint_ts) else stringResource(R.string.settings_hostedit_host_hint)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 )
                 if (useTs && ts.peers.isNotEmpty()) {
-                    Text("tailnet のデバイス", style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(R.string.settings_hostedit_tailnet_devices), style = MaterialTheme.typography.labelMedium)
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ts.peers.filter { it.online }.forEach { p ->
                             AssistChip(onClick = {
@@ -121,30 +123,30 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
-                        user, { user = it }, label = { Text("ユーザー名") }, singleLine = true, modifier = Modifier.weight(2f),
+                        user, { user = it }, label = { Text(stringResource(R.string.settings_hostedit_username)) }, singleLine = true, modifier = Modifier.weight(2f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                     )
                     OutlinedTextField(
-                        port, { port = it.filter(Char::isDigit) }, label = { Text("ポート") }, singleLine = true, modifier = Modifier.weight(1f),
+                        port, { port = it.filter(Char::isDigit) }, label = { Text(stringResource(R.string.settings_hostedit_port)) }, singleLine = true, modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     )
                 }
 
-                Text("認証", style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(R.string.settings_hostedit_auth), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(auth == AuthMethod.KEY, { auth = AuthMethod.KEY }, label = { Text("SSH 鍵") }, shape = CircleShape)
-                    FilterChip(auth == AuthMethod.PASSWORD, { auth = AuthMethod.PASSWORD }, label = { Text("パスワード") }, shape = CircleShape)
+                    FilterChip(auth == AuthMethod.KEY, { auth = AuthMethod.KEY }, label = { Text(stringResource(R.string.settings_hostedit_auth_key)) }, shape = CircleShape)
+                    FilterChip(auth == AuthMethod.PASSWORD, { auth = AuthMethod.PASSWORD }, label = { Text(stringResource(R.string.settings_hostedit_auth_password)) }, shape = CircleShape)
                 }
                 if (auth == AuthMethod.KEY) {
                     if (keys.isEmpty()) {
-                        Text("SSH 鍵がまだありません。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        TextButton(onClick = onManageKeys) { Text("鍵を作成・インポートする") }
+                        Text(stringResource(R.string.settings_hostedit_no_keys), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = onManageKeys) { Text(stringResource(R.string.settings_hostedit_manage_keys)) }
                     } else {
                         var expanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(expanded, { expanded = it }) {
                             OutlinedTextField(
-                                value = keys.firstOrNull { it.id == keyId }?.name ?: "選択してください",
-                                onValueChange = {}, readOnly = true, label = { Text("使用する鍵") },
+                                value = keys.firstOrNull { it.id == keyId }?.name ?: stringResource(R.string.settings_hostedit_choose),
+                                onValueChange = {}, readOnly = true, label = { Text(stringResource(R.string.settings_hostedit_key_label)) },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                                 modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
                             )
@@ -159,52 +161,52 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
                         }
                     }
                 } else {
-                    Text("パスワードは保存されず、接続のたびに入力します。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.settings_hostedit_password_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
                 VeilCard(Modifier.fillMaxWidth()) {
-                    SectionHeading("接続方法", "")
+                    SectionHeading(stringResource(R.string.settings_hostedit_connection), "")
                     SwitchRow(
-                        "Tailscale 経由で接続",
-                        if (app.tailscale.available) "アプリ内蔵の Tailscale を使います(公式アプリ・VPN 不要)"
-                        else "このビルドには Tailscale が組み込まれていません(端末側の VPN を使ってください)",
+                        stringResource(R.string.settings_hostedit_via_tailscale),
+                        if (app.tailscale.available) stringResource(R.string.settings_hostedit_ts_builtin)
+                        else stringResource(R.string.settings_hostedit_ts_missing),
                         useTs, enabled = app.tailscale.available,
                     ) { useTs = it }
-                    SwitchRow("マルチタブ / マルチペイン", "タブと画面分割を使い、エージェントの入力待ちを通知します", herdr) {
+                    SwitchRow(stringResource(R.string.settings_hostedit_multitab), stringResource(R.string.settings_hostedit_multitab_sub), herdr) {
                         herdr = it
                         if (!it && RemoteCommand.invokesHerdr(startup)) startup = ""
                         else if (it && startup.isBlank()) startup = "herdr"
                     }
-                    if (herdr) SwitchRow("Mosh", "ペインを Mosh で表示(回線が切り替わっても維持)。mosh-server が必要", useMosh) { useMosh = it }
+                    if (herdr) SwitchRow("Mosh", stringResource(R.string.settings_hostedit_mosh_sub), useMosh) { useMosh = it }
                 }
                 if (extensionsAvailable) VeilCard(Modifier.fillMaxWidth()) {
-                    SectionHeading("拡張スクリプト", "LUA")
-                    SwitchRow("このホストで有効にする", "マクロ・自動処理・返信候補をカスタマイズ", extEnabled) { extEnabled = it }
-                    SwitchRow("ホストのスクリプトを読み込む", "接続先の Lua を共通スクリプトに追加", extFromHost && extEnabled,
+                    SectionHeading(stringResource(R.string.settings_hostedit_extensions), "LUA")
+                    SwitchRow(stringResource(R.string.settings_hostedit_ext_enable), stringResource(R.string.settings_hostedit_ext_enable_sub), extEnabled) { extEnabled = it }
+                    SwitchRow(stringResource(R.string.settings_hostedit_ext_load_host), stringResource(R.string.settings_hostedit_ext_load_host_sub), extFromHost && extEnabled,
                         enabled = extEnabled) { extFromHost = it }
                 }
 
                 if (!herdr) {
                     OutlinedTextField(
-                        startup, { startup = it }, label = { Text("ログイン後に実行するコマンド") }, singleLine = true,
+                        startup, { startup = it }, label = { Text(stringResource(R.string.settings_hostedit_startup_label)) }, singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        supportingText = { Text("空欄なら通常のシェル") },
+                        supportingText = { Text(stringResource(R.string.settings_hostedit_startup_hint)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                     )
                 } else {
                     var advanced by remember { mutableStateOf(false) }
-                    TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "詳細 ▲" else "詳細 ▼") }
+                    TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) stringResource(R.string.settings_hostedit_advanced_open) else stringResource(R.string.settings_hostedit_advanced_closed)) }
                     if (advanced) {
                         OutlinedTextField(
-                            herdrSession, { herdrSession = it }, label = { Text("バックエンドのセッション名") }, singleLine = true,
+                            herdrSession, { herdrSession = it }, label = { Text(stringResource(R.string.settings_hostedit_backend_session)) }, singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
-                            supportingText = { Text("空欄なら android。パソコン側の作業と分けたいときに変更します") },
+                            supportingText = { Text(stringResource(R.string.settings_hostedit_backend_session_hint)) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                         )
                         OutlinedTextField(
-                            startup, { startup = it }, label = { Text("互換モードで実行するコマンド") }, singleLine = true,
+                            startup, { startup = it }, label = { Text(stringResource(R.string.settings_hostedit_compat_label)) }, singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
-                            supportingText = { Text("マルチタブが使えない環境でだけ使われます") },
+                            supportingText = { Text(stringResource(R.string.settings_hostedit_compat_hint)) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                         )
                     }
@@ -216,12 +218,12 @@ fun HostEditScreen(hostId: String?, onDone: () -> Unit, onManageKeys: () -> Unit
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("ホストを削除") },
-            text = { Text("「${original.displayName}」を削除しますか?") },
+            title = { Text(stringResource(R.string.settings_hostedit_delete_title)) },
+            text = { Text(stringResource(R.string.settings_hostedit_delete_message, original.displayName)) },
             confirmButton = {
-                TextButton(onClick = { app.hosts.delete(original.id); confirmDelete = false; onDone() }) { Text("削除") }
+                TextButton(onClick = { app.hosts.delete(original.id); confirmDelete = false; onDone() }) { Text(stringResource(R.string.settings_delete)) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("キャンセル") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.settings_cancel)) } },
         )
     }
 }

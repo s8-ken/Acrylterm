@@ -1,5 +1,6 @@
 package com.shibaken.androidterminal.ui
 
+import androidx.compose.ui.res.stringResource
 import android.app.Activity
 import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
@@ -139,8 +140,8 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
     if (session == null) {
         Box(Modifier.fillMaxSize().systemBarsPadding(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("セッションが見つかりません")
-                TextButton(onClick = onBack) { Text("戻る") }
+                Text(stringResource(R.string.term_session_not_found))
+                TextButton(onClick = onBack) { Text(stringResource(R.string.term_back)) }
             }
         }
         return
@@ -246,7 +247,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
         if (herdrMissing && !session.herdrMissingNoticeShown) {
             session.herdrMissingNoticeShown = true
             snackbarHost.currentSnackbarData?.dismiss()
-            val result = snackbarHost.showSnackbar("herdr が見つかりません", actionLabel = "オフにする", duration = SnackbarDuration.Long)
+            val result = snackbarHost.showSnackbar(context.getString(R.string.term_herdr_missing), actionLabel = context.getString(R.string.term_turn_off), duration = SnackbarDuration.Long)
             if (result == SnackbarResult.ActionPerformed) {
                 app.hosts.get(session.profile.id)?.let {
                     app.hosts.save(it.copy(herdrEnabled = false,
@@ -340,46 +341,46 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                 // Local state: opening the menu recomposes only this small scope, not the whole screen.
                 var menu by remember { mutableStateOf(false) }
                 Box {
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "メニュー") }
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.term_menu)) }
                     DropdownMenu(menu, { menu = false }) {
                         val tint = CyanVeil.Muted
                         @Composable fun Item(label: String, icon: ImageVector, onClick: () -> Unit) =
                             DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(icon, null, tint = tint) }, onClick = { menu = false; onClick() })
-                        Item("ホスト一覧に戻る", Icons.AutoMirrored.Filled.ArrowBack) { onBack() }
+                        Item(stringResource(R.string.term_back_to_hosts), Icons.AutoMirrored.Filled.ArrowBack) { onBack() }
                         if (herdr != null) {
                             HorizontalDivider()
-                            Item("セッション一覧", Icons.Filled.Dns) { showSessionPicker = true; session.refreshHerdrSessions() }
-                            Item("ワークスペース一覧", Icons.Filled.Menu) { scope.launch { drawerState.open() } }
-                            Item("タブ一覧", Icons.Filled.GridView) { showOverview = true }
+                            Item(stringResource(R.string.term_sessions), Icons.Filled.Dns) { showSessionPicker = true; session.refreshHerdrSessions() }
+                            Item(stringResource(R.string.term_workspaces), Icons.Filled.Menu) { scope.launch { drawerState.open() } }
+                            Item(stringResource(R.string.term_tabs), Icons.Filled.GridView) { showOverview = true }
                             if (isPanes && focusedPaneId != null) {
                                 Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.AutoMirrored.Filled.ViewQuilt, null, tint = tint)
-                                    Text("ペインを分割", Modifier.weight(1f).padding(start = 12.dp), style = MaterialTheme.typography.bodyLarge)
-                                    IconButton(onClick = { menu = false; herdr.split("right") }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.VerticalSplit, "右に分割", tint = CyanVeil.Cyan) }
-                                    IconButton(onClick = { menu = false; herdr.split("down") }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.HorizontalSplit, "下に分割", tint = CyanVeil.Cyan) }
+                                    Text(stringResource(R.string.term_split_pane), Modifier.weight(1f).padding(start = 12.dp), style = MaterialTheme.typography.bodyLarge)
+                                    IconButton(onClick = { menu = false; herdr.split("right") }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.VerticalSplit, stringResource(R.string.term_split_right), tint = CyanVeil.Cyan) }
+                                    IconButton(onClick = { menu = false; herdr.split("down") }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.HorizontalSplit, stringResource(R.string.term_split_down), tint = CyanVeil.Cyan) }
                                 }
                             }
                         }
                         if (extensionsEnabled && session.profile.extEnabled) {
                             HorizontalDivider()
-                            if (extRt != null) Item("拡張一覧", Icons.AutoMirrored.Filled.ViewList) { showExtRunning = true }
+                            if (extRt != null) Item(stringResource(R.string.term_extensions), Icons.AutoMirrored.Filled.ViewList) { showExtRunning = true }
                             if (session.profile.extLoadFromHost && extRt != null) {
-                                Item("拡張を作る", Icons.Filled.AutoAwesome) { extGenerateName = ""; extGenerateRequest = ""; extGenerateAgent = ""; showExtGenerate = true }
+                                Item(stringResource(R.string.term_extension_create), Icons.Filled.AutoAwesome) { extGenerateName = ""; extGenerateRequest = ""; extGenerateAgent = ""; showExtGenerate = true }
                             }
-                            Item("拡張の再読込", Icons.Filled.Refresh) { session.reloadExtensions(fetch = true) }
+                            Item(stringResource(R.string.term_extensions_reload), Icons.Filled.Refresh) { session.reloadExtensions(fetch = true) }
                         }
                         HorizontalDivider()
                         // Stays open so the size can be adjusted repeatedly.
                         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.TextFields, null, tint = tint)
-                            Text("文字サイズ", Modifier.weight(1f).padding(start = 12.dp), style = MaterialTheme.typography.bodyLarge)
-                            IconButton(onClick = { activeView.textSizeSp -= 1f }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.Remove, "文字を小さく", tint = CyanVeil.Cyan) }
-                            IconButton(onClick = { activeView.textSizeSp += 1f }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.Add, "文字を大きく", tint = CyanVeil.Cyan) }
+                            Text(stringResource(R.string.term_text_size), Modifier.weight(1f).padding(start = 12.dp), style = MaterialTheme.typography.bodyLarge)
+                            IconButton(onClick = { activeView.textSizeSp -= 1f }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.Remove, stringResource(R.string.term_text_smaller), tint = CyanVeil.Cyan) }
+                            IconButton(onClick = { activeView.textSizeSp += 1f }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.Add, stringResource(R.string.term_text_larger), tint = CyanVeil.Cyan) }
                         }
-                        Item("設定", Icons.Filled.Tune) { onAppearance() }
+                        Item(stringResource(R.string.term_settings), Icons.Filled.Tune) { onAppearance() }
                         HorizontalDivider()
-                        if (state is ConnState.Disconnected) Item("再接続", Icons.Filled.Refresh) { session.connect() }
-                        Item("切断", Icons.Filled.LinkOff) { confirmCloseConnection = true }
+                        if (state is ConnState.Disconnected) Item(stringResource(R.string.term_reconnect), Icons.Filled.Refresh) { session.connect() }
+                        Item(stringResource(R.string.term_disconnect), Icons.Filled.LinkOff) { confirmCloseConnection = true }
                     }
                 }
             }
@@ -391,15 +392,15 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                 Modifier.fillMaxWidth().height(56.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                VeilIconButton(R.drawable.veil_back, "ホスト一覧に戻る", onBack)
+                VeilIconButton(R.drawable.veil_back, stringResource(R.string.term_back_to_hosts), onBack)
                 Spacer(Modifier.width(10.dp))
                 if (herdr != null && !isPanes) {
-                    IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Filled.Menu, "ワークスペースを開く") }
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Filled.Menu, stringResource(R.string.term_open_workspaces)) }
                 }
                 Column(Modifier.weight(1f)) {
                     Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (isPanes) {
-                        Text(if (state is ConnState.Connected) "● 接続中" + if (session.profile.useTailscale) " / Tailscale" else " / SSH" else "セッション",
+                        Text(if (state is ConnState.Connected) stringResource(R.string.term_connected) + if (session.profile.useTailscale) " / Tailscale" else " / SSH" else stringResource(R.string.term_session),
                             style = MaterialTheme.typography.labelSmall, color = CyanVeil.Mint)
                     }
                     if (!isPanes) {
@@ -422,10 +423,10 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                     ) {
                         Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(StatusColors.blocked))
                         Spacer(Modifier.width(6.dp))
-                        Text("入力待ち ${herdrState.blockedCount}", style = MaterialTheme.typography.labelMedium, color = StatusColors.blocked)
+                        Text(stringResource(R.string.term_waiting_count, herdrState.blockedCount), style = MaterialTheme.typography.labelMedium, color = StatusColors.blocked)
                     }
                 }
-                VeilIconButton(R.drawable.veil_tune, "設定", onAppearance)
+                VeilIconButton(R.drawable.veil_tune, stringResource(R.string.term_settings), onAppearance)
                 sessionMenu()
             }
 
@@ -446,12 +447,12 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "切断: ${s.reason ?: "手動で切断しました"}",
+                        stringResource(R.string.term_disconnected_reason, s.reason ?: stringResource(R.string.term_disconnected_manual)),
                         Modifier.weight(1f).padding(vertical = 6.dp),
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 3,
                     )
-                    TextButton(onClick = { session.connect() }) { Text("再接続") }
+                    TextButton(onClick = { session.connect() }) { Text(stringResource(R.string.term_reconnect)) }
                 }
                 ConnState.Connected -> {}
             }
@@ -464,7 +465,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                         val connectionTint = if (state is ConnState.Connected) CyanVeil.Mint else CyanVeil.Amber
                         BoxWithConstraints(Modifier.weight(1f).heightIn(min = 40.dp)
                             .clickable { showSessionPicker = true; session.refreshHerdrSessions() }
-                            .semantics { contentDescription = "herdr セッションを選択、${session.profile.displayName} / $selectedHerdrSession" }, contentAlignment = Alignment.CenterStart) {
+                            .semantics { contentDescription = context.getString(R.string.term_herdr_session_desc, session.profile.displayName, selectedHerdrSession) }, contentAlignment = Alignment.CenterStart) {
                             val hostMaxWidth = (maxWidth * .42f).coerceAtLeast(24.dp)
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Text("● ", color = connectionTint, style = MaterialTheme.typography.labelSmall)
@@ -481,23 +482,23 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                                 activeView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                                 activeView.toggleKeyboard()
                             }, modifier = Modifier.size(48.dp)) {
-                                VeilIcon(R.drawable.veil_keyboard, "キーボードの表示/非表示", CyanVeil.Cyan)
+                                VeilIcon(R.drawable.veil_keyboard, stringResource(R.string.term_keyboard_toggle), CyanVeil.Cyan)
                             }
                             IconButton(onClick = { terminalFullscreen = false }, modifier = Modifier.size(48.dp)) {
-                                Icon(Icons.Filled.FullscreenExit, "全画面を解除", tint = CyanVeil.Cyan)
+                                Icon(Icons.Filled.FullscreenExit, stringResource(R.string.term_fullscreen_exit), tint = CyanVeil.Cyan)
                             }
                         } else {
                             IconButton(onClick = { terminalFullscreen = true }, modifier = Modifier.size(48.dp)) {
-                                VeilIcon(R.drawable.veil_expand, "全画面表示")
+                                VeilIcon(R.drawable.veil_expand, stringResource(R.string.term_fullscreen))
                             }
-                            Text(herdrState.pane(herdrState.focusedPaneId)?.title2 ?: "タブなし", Modifier.widthIn(max = 112.dp),
+                            Text(herdrState.pane(herdrState.focusedPaneId)?.title2 ?: stringResource(R.string.term_no_tabs), Modifier.widthIn(max = 112.dp),
                                 style = MaterialTheme.typography.labelSmall, color = CyanVeil.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(CyanVeil.Border))
                     if (herdrState.focusedTabId == null) {
                         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Text("新しいタブを追加してください", color = CyanVeil.Muted, style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(R.string.term_add_tab_hint), color = CyanVeil.Muted, style = MaterialTheme.typography.bodySmall)
                         }
                         LaunchedEffect(session) { session.setVisiblePanes(emptySet()) }
                     } else key(selectedHerdrSession) { PaneLayout(
@@ -510,9 +511,9 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                         herdrState.panes.any { it.tabId == tab.tabId && it.agentStatus == AgentStatus.BLOCKED } }
                     if (!fullscreen && waiting != null) Row(Modifier.hideWhenIme(imeInsets).fillMaxWidth().clip(MaterialTheme.shapes.medium)
                         .background(CyanVeil.Raised).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("! ${waiting.title} が入力待ち", Modifier.weight(1f), color = CyanVeil.Amber, style = MaterialTheme.typography.labelSmall,
+                        Text(stringResource(R.string.term_tab_waiting, waiting.title), Modifier.weight(1f), color = CyanVeil.Amber, style = MaterialTheme.typography.labelSmall,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        TextButton(onClick = { herdr!!.focusTab(waiting.tabId) }, modifier = Modifier.height(48.dp)) { Text("確認する") }
+                        TextButton(onClick = { herdr!!.focusTab(waiting.tabId) }, modifier = Modifier.height(48.dp)) { Text(stringResource(R.string.term_check)) }
                     }
                 }
             } else {
@@ -532,12 +533,12 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.SpaceEvenly,
                     ) {
-                        IconButton(onClick = { herdr.focusDirection("left") }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "左のペインへ", tint = MaterialTheme.colorScheme.onSurface) }
-                        IconButton(onClick = { herdr.focusDirection("up") }) { Icon(Icons.Filled.KeyboardArrowUp, "上のペインへ", tint = MaterialTheme.colorScheme.onSurface) }
-                        IconButton(onClick = { herdr.focusDirection("down") }) { Icon(Icons.Filled.KeyboardArrowDown, "下のペインへ", tint = MaterialTheme.colorScheme.onSurface) }
-                        IconButton(onClick = { herdr.focusDirection("right") }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "右のペインへ", tint = MaterialTheme.colorScheme.onSurface) }
-                        IconButton(onClick = { herdr.toggleZoom() }) { Icon(Icons.Filled.CenterFocusStrong, "ズーム", tint = MaterialTheme.colorScheme.onSurface) }
-                        IconButton(onClick = { confirmClosePane = true }) { Icon(Icons.Filled.Close, "ペインを閉じる", tint = MaterialTheme.colorScheme.onSurface) }
+                        IconButton(onClick = { herdr.focusDirection("left") }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, stringResource(R.string.term_pane_left), tint = MaterialTheme.colorScheme.onSurface) }
+                        IconButton(onClick = { herdr.focusDirection("up") }) { Icon(Icons.Filled.KeyboardArrowUp, stringResource(R.string.term_pane_up), tint = MaterialTheme.colorScheme.onSurface) }
+                        IconButton(onClick = { herdr.focusDirection("down") }) { Icon(Icons.Filled.KeyboardArrowDown, stringResource(R.string.term_pane_down), tint = MaterialTheme.colorScheme.onSurface) }
+                        IconButton(onClick = { herdr.focusDirection("right") }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, stringResource(R.string.term_pane_right), tint = MaterialTheme.colorScheme.onSurface) }
+                        IconButton(onClick = { herdr.toggleZoom() }) { Icon(Icons.Filled.CenterFocusStrong, stringResource(R.string.term_zoom), tint = MaterialTheme.colorScheme.onSurface) }
+                        IconButton(onClick = { confirmClosePane = true }) { Icon(Icons.Filled.Close, stringResource(R.string.term_close_pane), tint = MaterialTheme.colorScheme.onSurface) }
                     }
                 }
             }
@@ -567,7 +568,7 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                     .clickable {
                         activeView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                         showComposer = true
-                    }.semantics { contentDescription = "返信を作成" }
+                    }.semantics { contentDescription = context.getString(R.string.term_compose_reply) }
                     .padding(horizontal = 12.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     VeilIcon(R.drawable.veil_edit, null, CyanVeil.Cyan)
@@ -583,8 +584,8 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
             Row(Modifier.align(Alignment.BottomCenter).zIndex(2f).padding(horizontal = 16.dp, vertical = 12.dp)
                 .fillMaxWidth().clip(MaterialTheme.shapes.medium).background(CyanVeil.Raised)
                 .border(1.dp, CyanVeil.Border, MaterialTheme.shapes.medium).padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("「${close.title}」を閉じました", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                TextButton(onClick = { herdr?.undoCloseTab(close.tabId) }, modifier = Modifier.height(48.dp)) { Text("元に戻す") }
+                Text(stringResource(R.string.term_tab_closed, close.title), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                TextButton(onClick = { herdr?.undoCloseTab(close.tabId) }, modifier = Modifier.height(48.dp)) { Text(stringResource(R.string.term_undo)) }
             }
         }
         SnackbarHost(snackbarHost, Modifier.align(Alignment.BottomCenter).zIndex(3f).padding(bottom = 96.dp))
@@ -668,25 +669,24 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
             onDismiss = { herdr.cancelWorkspaceCreation() })
     }
     if (confirmCloseConnection) {
-        AlertDialog(onDismissRequest = { confirmCloseConnection = false }, title = { Text("接続を閉じますか？") },
+        AlertDialog(onDismissRequest = { confirmCloseConnection = false }, title = { Text(stringResource(R.string.term_close_conn_title)) },
             text = { Text(if (herdr != null)
-                "SSH/Mosh接続を閉じ、ホスト一覧へ戻ります。サーバー上のタブとワークスペースは閉じません。"
-                else "SSH接続を閉じ、ホスト一覧へ戻ります。この接続のシェルや実行中の処理は終了する場合があります。") },
-            confirmButton = { TextButton(onClick = { confirmCloseConnection = false; app.sessions.close(session.id); onBack() }) { Text("接続を閉じる") } },
-            dismissButton = { TextButton(onClick = { confirmCloseConnection = false }) { Text("キャンセル") } })
+                stringResource(R.string.term_close_conn_herdr)
+                else stringResource(R.string.term_close_conn_plain)) },
+            confirmButton = { TextButton(onClick = { confirmCloseConnection = false; app.sessions.close(session.id); onBack() }) { Text(stringResource(R.string.term_close_conn)) } },
+            dismissButton = { TextButton(onClick = { confirmCloseConnection = false }) { Text(stringResource(R.string.term_cancel)) } })
     }
     bulkCloseResult?.let { result ->
-        val unit = if (result.plan.kind == BulkCloseKind.TABS) "タブ" else "ワークスペース"
         AlertDialog(onDismissRequest = { herdr?.dismissBulkCloseResult() },
-            title = { Text(if (result.failures.isEmpty()) "一括終了しました" else "一部を閉じられませんでした") },
+            title = { Text(stringResource(if (result.failures.isEmpty()) R.string.term_bulk_done else R.string.term_bulk_partial)) },
             text = { Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${result.plan.ids.distinct().size} 件中 ${result.completed} 件の${unit}を終了しました（既に終了した対象を含みます）。")
+                Text(stringResource(if (result.plan.kind == BulkCloseKind.TABS) R.string.term_bulk_result_tabs else R.string.term_bulk_result_workspaces, result.plan.ids.distinct().size, result.completed))
                 result.failures.take(5).forEach { failure ->
                     val label = if (result.plan.kind == BulkCloseKind.TABS) rawHerdrState.tabs.firstOrNull { it.tabId == failure.id }?.title
                         else rawHerdrState.workspace(failure.id)?.title
                     Text("${label ?: failure.id}: ${failure.reason}", style = MaterialTheme.typography.bodySmall)
                 }
-                if (result.failures.size > 5) Text("ほか ${result.failures.size - 5} 件", style = MaterialTheme.typography.bodySmall)
+                if (result.failures.size > 5) Text(stringResource(R.string.term_bulk_more, result.failures.size - 5), style = MaterialTheme.typography.bodySmall)
             } }, confirmButton = { TextButton(onClick = { herdr?.dismissBulkCloseResult() }) { Text("OK") } })
     }
 
@@ -732,15 +732,15 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
         val pane = herdrState.pane(herdrState.focusedPaneId)
         AlertDialog(
             onDismissRequest = { confirmClosePane = false },
-            title = { Text("ペインを閉じる") },
-            text = { Text("「${pane?.title2 ?: "フォーカス中のペイン"}」を閉じます。実行中のプロセスは終了します。") },
+            title = { Text(stringResource(R.string.term_close_pane)) },
+            text = { Text(stringResource(R.string.term_close_pane_message, pane?.title2 ?: stringResource(R.string.term_focused_pane))) },
             confirmButton = {
                 TextButton(onClick = {
                     pane?.let { herdr.closePane(it.paneId) }
                     confirmClosePane = false
-                }) { Text("閉じる") }
+                }) { Text(stringResource(R.string.term_close)) }
             },
-            dismissButton = { TextButton(onClick = { confirmClosePane = false }) { Text("キャンセル") } },
+            dismissButton = { TextButton(onClick = { confirmClosePane = false }) { Text(stringResource(R.string.term_cancel)) } },
         )
     }
 }

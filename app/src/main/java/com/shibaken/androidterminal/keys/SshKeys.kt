@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.keys
 
+import com.shibaken.androidterminal.R
+import com.shibaken.androidterminal.App
 import android.util.Base64
 import com.shibaken.androidterminal.data.KeyType
 import net.schmizz.sshj.DefaultConfig
@@ -30,7 +32,7 @@ object SshKeys {
     fun generate(type: KeyType, comment: String): GeneratedKey = when (type) {
         KeyType.ED25519 -> generateEd25519(comment)
         KeyType.RSA_4096 -> generateRsa(comment)
-        else -> throw IllegalArgumentException("生成に対応していない鍵の種類です: ${type.label}")
+        else -> throw IllegalArgumentException(App.str(R.string.core_key_unsupported_generate, type.label))
     }
 
     private fun generateEd25519(comment: String): GeneratedKey {
@@ -59,7 +61,7 @@ object SshKeys {
         val format = KeyProviderUtil.detectKeyFileFormat(privateKeyText, false)
         val fkp: FileKeyProvider = Factory.Named.Util.create(
             DefaultConfig().fileKeyProviderFactories, format.toString()
-        ) ?: throw IllegalArgumentException("この形式の秘密鍵には対応していません: $format")
+        ) ?: throw IllegalArgumentException(App.str(R.string.core_key_unsupported_format, format.toString()))
         fkp.init(privateKeyText, null, passphrase?.let { passwordFinder(it) })
         return fkp
     }

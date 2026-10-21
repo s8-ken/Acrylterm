@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.ui
 
+import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
@@ -49,38 +51,40 @@ fun AppearanceScreen(onBack: () -> Unit, onLicenses: () -> Unit) {
     val colors = ColorSelection.decode(colorCode)
     val draft = AppearanceSettings(transparency, blurred, colors)
     var editing by remember { mutableStateOf<ColorRole?>(null) }
+    val descTransparency = stringResource(R.string.settings_appearance_transparency)
+    val descBlur = stringResource(R.string.settings_appearance_blur)
     CompositionLocalProvider(LocalAppearance provides draft) {
         VeilBackdrop(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 20.dp)) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    VeilIconButton(R.drawable.veil_back, "戻る", onBack)
-                    Text("設定", fontSize = 23.sp, fontWeight = FontWeight.Medium)
+                    VeilIconButton(R.drawable.veil_back, stringResource(R.string.settings_back), onBack)
+                    Text(stringResource(R.string.settings_appearance_title), fontSize = 23.sp, fontWeight = FontWeight.Medium)
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     AppearancePreview(draft)
                     VeilCard(Modifier.fillMaxWidth()) {
-                        SectionHeading("カラープロファイル", "")
+                        SectionHeading(stringResource(R.string.settings_appearance_color_profile), "")
                         for (preset in ColorProfiles.presets) {
                             ProfileTile(preset.name, preset.palette, colors.id == preset.id) {
                                 colorCode = ColorSelection(preset.id, preset.id).encode()
                             }
                         }
-                        ProfileTile("カスタム", colors.resolve(), colors.isCustom) { colorCode = colors.toCustom().encode() }
+                        ProfileTile(stringResource(R.string.settings_appearance_custom), colors.resolve(), colors.isCustom) { colorCode = colors.toCustom().encode() }
                         if (colors.isCustom) {
                             val p = colors.resolve()
                             for (role in ColorRole.values()) {
-                                ColorRow(role.label, role.of(p)) { editing = role }
+                                ColorRow(stringResource(role.labelRes), role.of(p)) { editing = role }
                             }
                         }
                     }
                     VeilCard(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("背景の透明度", fontWeight = FontWeight.Medium)
+                            Text(stringResource(R.string.settings_appearance_transparency), fontWeight = FontWeight.Medium)
                             Text("$transparency%", fontSize = 24.sp, color = CyanVeil.Cyan, fontWeight = FontWeight.Medium)
                         }
                         Slider(transparency.toFloat(), { transparency = it.roundToInt() }, valueRange = 0f..100f,
-                            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "背景の透明度" },
+                            modifier = Modifier.fillMaxWidth().semantics { contentDescription = descTransparency },
                             thumb = { Box(Modifier.size(24.dp).background(CyanVeil.Cyan, CircleShape).border(5.dp, CyanVeil.Ink, CircleShape)) },
                             track = {
                                 Canvas(Modifier.fillMaxWidth().height(6.dp)) {
@@ -89,42 +93,42 @@ fun AppearanceScreen(onBack: () -> Unit, onLicenses: () -> Unit) {
                                     if (transparency > 0) drawLine(CyanVeil.Cyan, Offset(0f, y), Offset(size.width * transparency / 100f, y), size.height, StrokeCap.Round)
                                 }
                             })
-                        SectionHeading("0%  不透明", "100%  透明")
+                        SectionHeading(stringResource(R.string.settings_appearance_opaque), stringResource(R.string.settings_appearance_transparent))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             for (value in listOf(0, 28, 55)) {
                                 FilterChip(selected = transparency == value, onClick = { transparency = value },
-                                    label = { Text(if (value == 28) "28% おすすめ" else "$value%", fontSize = 11.sp) },
+                                    label = { Text(if (value == 28) stringResource(R.string.settings_appearance_recommended_28) else "$value%", fontSize = 11.sp) },
                                     shape = CircleShape, modifier = Modifier.weight(if (value == 28) 1.7f else 1f).heightIn(min = 48.dp))
                             }
                         }
-                        Text("文字・アイコンの濃さは変わりません", fontSize = 11.sp, color = CyanVeil.Muted)
+                        Text(stringResource(R.string.settings_appearance_text_unchanged), fontSize = 11.sp, color = CyanVeil.Muted)
                     }
                     VeilCard(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("背景をぼかす", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                Text("壁紙の輪郭をやわらかく", fontSize = 11.sp, color = CyanVeil.Muted)
+                                Text(stringResource(R.string.settings_appearance_blur), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                Text(stringResource(R.string.settings_appearance_blur_hint), fontSize = 11.sp, color = CyanVeil.Muted)
                             }
-                            Switch(blurred, { blurred = it }, modifier = Modifier.semantics { contentDescription = "背景をぼかす" })
+                            Switch(blurred, { blurred = it }, modifier = Modifier.semantics { contentDescription = descBlur })
                         }
                     }
                     TextButton(onClick = { transparency = 28; blurred = true; colorCode = ColorSelection().encode() }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                        Text("おすすめの設定に戻す")
+                        Text(stringResource(R.string.settings_appearance_reset))
                     }
                     Button(onClick = { app.applyAppearance(draft); onBack() }, shape = CircleShape,
                         modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 52.dp)) {
-                        Text("この外観を適用", Modifier.padding(horizontal = 12.dp))
+                        Text(stringResource(R.string.settings_appearance_apply), Modifier.padding(horizontal = 12.dp))
                     }
                     VeilCard(Modifier.fillMaxWidth()) {
-                        SectionHeading("高度な機能", "")
-                        SwitchRow("拡張機能 (Lua)", "補助キー・コマンド・マクロを Lua で追加", appSettings.extensionsEnabled) {
+                        SectionHeading(stringResource(R.string.settings_appearance_advanced), "")
+                        SwitchRow(stringResource(R.string.settings_appearance_ext_title), stringResource(R.string.settings_appearance_ext_sub), appSettings.extensionsEnabled) {
                             app.settings.setExtensionsEnabled(it)
                         }
                     }
                     VeilCard(Modifier.fillMaxWidth().clickable(onClick = onLicenses)) {
                         Row(Modifier.fillMaxWidth().heightIn(min = 32.dp), horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically) {
-                            Text("ライセンス", fontWeight = FontWeight.Medium)
+                            Text(stringResource(R.string.settings_licenses), fontWeight = FontWeight.Medium)
                             Text("›", fontSize = 20.sp, color = CyanVeil.Muted)
                         }
                     }
@@ -133,7 +137,7 @@ fun AppearanceScreen(onBack: () -> Unit, onLicenses: () -> Unit) {
         }
     }
     editing?.let { role ->
-        ColorPickerDialog(role.label, role.of(colors.resolve()), { editing = null }) { picked ->
+        ColorPickerDialog(stringResource(role.labelRes), role.of(colors.resolve()), { editing = null }) { picked ->
             colorCode = role.set(colors.toCustom(), picked).encode()
             editing = null
         }
@@ -165,8 +169,9 @@ internal fun AppearancePreview(settings: AppearanceSettings, modifier: Modifier 
     }
 }
 
-private enum class ColorRole(val label: String) {
-    Background("背景"), Accent("アクセント"), Text("文字"), Secondary("サブアクセント");
+private enum class ColorRole(@StringRes val labelRes: Int) {
+    Background(R.string.settings_appearance_role_background), Accent(R.string.settings_appearance_role_accent),
+    Text(R.string.settings_appearance_role_text), Secondary(R.string.settings_appearance_role_secondary);
 
     fun of(p: ColorPalette): Color = Color(when (this) {
         Background -> p.background; Accent -> p.accent; Text -> p.text; Secondary -> p.secondary
@@ -208,6 +213,9 @@ private fun ColorRow(label: String, color: Color, onClick: () -> Unit) {
 
 @Composable
 private fun ColorPickerDialog(title: String, initial: Color, onDismiss: () -> Unit, onPick: (Color) -> Unit) {
+    val descHue = stringResource(R.string.settings_appearance_hue)
+    val descSat = stringResource(R.string.settings_appearance_saturation)
+    val descVal = stringResource(R.string.settings_appearance_brightness)
     val hsv = remember { FloatArray(3).also { android.graphics.Color.colorToHSV(initial.toArgb(), it) } }
     var h by remember { mutableFloatStateOf(hsv[0]) }
     var s by remember { mutableFloatStateOf(hsv[1]) }
@@ -221,9 +229,9 @@ private fun ColorPickerDialog(title: String, initial: Color, onDismiss: () -> Un
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Box(Modifier.fillMaxWidth().height(40.dp).background(current, MaterialTheme.shapes.small)
                     .border(1.dp, CyanVeil.Border, MaterialTheme.shapes.small))
-                Slider(h, { h = it; syncHex() }, valueRange = 0f..360f, modifier = Modifier.semantics { contentDescription = "色相" })
-                Slider(s, { s = it; syncHex() }, valueRange = 0f..1f, modifier = Modifier.semantics { contentDescription = "彩度" })
-                Slider(v, { v = it; syncHex() }, valueRange = 0f..1f, modifier = Modifier.semantics { contentDescription = "明るさ" })
+                Slider(h, { h = it; syncHex() }, valueRange = 0f..360f, modifier = Modifier.semantics { contentDescription = descHue })
+                Slider(s, { s = it; syncHex() }, valueRange = 0f..1f, modifier = Modifier.semantics { contentDescription = descSat })
+                Slider(v, { v = it; syncHex() }, valueRange = 0f..1f, modifier = Modifier.semantics { contentDescription = descVal })
                 OutlinedTextField(hex, {
                     hex = it
                     ColorProfiles.parseHex(it)?.let { argb ->
@@ -235,6 +243,6 @@ private fun ColorPickerDialog(title: String, initial: Color, onDismiss: () -> Un
                     textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace))
             }
         },
-        confirmButton = { TextButton({ onPick(current) }) { Text("決定") } },
-        dismissButton = { TextButton(onDismiss) { Text("キャンセル") } })
+        confirmButton = { TextButton({ onPick(current) }) { Text(stringResource(R.string.settings_appearance_ok)) } },
+        dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.settings_cancel)) } })
 }

@@ -1,5 +1,7 @@
 package com.shibaken.androidterminal.ui
 
+import com.shibaken.androidterminal.R
+import androidx.compose.ui.res.stringResource
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -122,10 +124,11 @@ fun ComposerPanel(draftKey: String, onSend: suspend (String) -> Boolean, onDismi
         ) {
             // Own handle (consumes its drags): window-space deltas, because the handle itself moves while the field grows.
             var originY by remember { mutableFloatStateOf(0f) }
+            val resizeDesc = stringResource(R.string.term_composer_resize)
             Box(
                 Modifier.fillMaxWidth().height(32.dp)
                     .onGloballyPositioned { originY = it.positionInWindow().y }
-                    .semantics { contentDescription = "入力欄の高さを変更" }
+                    .semantics { contentDescription = resizeDesc }
                     .pointerInput(maxH) {
                         awaitEachGesture {
                             val down = awaitFirstDown()
@@ -184,7 +187,7 @@ fun ComposerPanel(draftKey: String, onSend: suspend (String) -> Boolean, onDismi
                             }
                         }
                     },
-                ) { Icon(Icons.AutoMirrored.Filled.Send, "送信") }
+                ) { Icon(Icons.AutoMirrored.Filled.Send, stringResource(R.string.term_send)) }
             }
         }
     }
