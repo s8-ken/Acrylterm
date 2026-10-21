@@ -449,6 +449,7 @@ internal class CyanVeilUiCapture(private val instrumentation: Instrumentation) {
         capture("terminal-fullscreen")
         click("キーボードの表示/非表示")
         awaitCondition { imeVisible(activity) }
+        awaitNode { it.text?.toString() == "ESC" }
         capture("terminal-fullscreen-keyboard")
         instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
         awaitCondition { !imeVisible(activity) }

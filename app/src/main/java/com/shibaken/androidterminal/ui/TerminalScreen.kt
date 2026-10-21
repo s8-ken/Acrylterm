@@ -544,7 +544,8 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
 
             // --- extra keys ---------------------------------------------------------------
             // Reading modTick makes the bar recompose when the sticky modifiers change.
-            if (!fullscreen) ExtraKeysBar(
+            // Fullscreen hides it only while the keyboard is down: typing on a phone needs these keys.
+            if (!fullscreen || imeVisible) ExtraKeysBar(
                 view = activeView,
                 ctrlOn = modTick >= 0 && modifiers.ctrl,
                 altOn = modTick >= 0 && modifiers.alt,
