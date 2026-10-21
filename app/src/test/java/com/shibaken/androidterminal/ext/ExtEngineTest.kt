@@ -364,10 +364,16 @@ class ExtEngineTest {
     @Test fun lazyPatternsOnLargeSubjectsRejected() {
         assertFalse(load("return (('a'):rep(20000)):find('(.-)b')").ok)
         assertTrue(load("return (('a'):rep(20000)):find('b')").ok)
-        val t0 = System.currentTimeMillis()
-        load("return (('a'):rep(32000)):find('a+b')")
-        // Loose bound: pattern matching isn't interruptible yet, so this worst case takes several seconds on CI runners.
-        assertTrue(System.currentTimeMillis() - t0 < 20_000)
+        // 最悪ケース(O(n^2) のバックトラック)は期限で中断される
+        val rt = LuaRuntime(maxInstructions = 200_000, maxWallMillis = 1_000)
+        val e = ExtEngine(host, rt)
+        try {
+            val t0 = System.currentTimeMillis()
+            val r = runBlocking { e.reload(listOf(ExtScript("w.lua", "return (('a'):rep(32000)):find('a+b')"))) }
+            assertTrue(System.currentTimeMillis() - t0 < 5_000)
+            assertFalse(r.ok)
+            assertTrue(r.errors.toString(), r.errors.toString().contains("time limit exceeded"))
+        } finally { e.close() }
     }
 
     // ---- timer ----

@@ -197,7 +197,16 @@ class LuaRuntime(
         for (k in arrayOf("dofile", "loadfile", "collectgarbage", "package", "require")) g.set(k, LuaValue.NIL)
         val string = g.get("string")
         string.set("dump", LuaValue.NIL)
-        // LuaJ のパターンマッチはネイティブ実行で命令数フックが効かないため、長い対象を拒否する
+        // LuaJ 標準のパターンマッチはネイティブ実行で命令数フックが効かないため、期限チェック付きの
+        // 自前版(LuaPatterns)に差し替える。メソッド呼び出し形式も string テーブル経由で同じ関数になる。
+        LuaPatterns.install(string.checktable()) {
+            aborted?.let { throw LuaError(it) }
+            if (System.nanoTime() > deadline) {
+                aborted = "time limit exceeded (${maxWallMillis}ms)"
+                throw LuaError(aborted!!)
+            }
+        }
+        // 二重の防御として、長い対象も拒否する
         for (name in arrayOf("find", "match", "gmatch", "gsub")) {
             val orig = string.get(name)
             string.set(name, object : VarArgFunction() {
@@ -207,6 +216,9 @@ class LuaRuntime(
                         val n = subj.checkstring().length()
                         if (n > MAX_PATTERN_SUBJECT) throw LuaError("string.$name: subject too long (max $MAX_PATTERN_SUBJECT bytes)")
                         val pat = args.arg(2)
+                        if (pat.isstring() && pat.checkstring().length() > MAX_PATTERN_LENGTH) {
+                            throw LuaError("string.$name: pattern too long (max $MAX_PATTERN_LENGTH bytes)")
+                        }
                         if (n > MAX_PATTERN_SUBJECT_LAZY && pat.isstring() && pat.tojstring().let { '-' in it || '*' in it }) {
                             throw LuaError("string.$name: subject too long for a pattern with '-' or '*' (max $MAX_PATTERN_SUBJECT_LAZY bytes)")
                         }
@@ -320,6 +332,7 @@ class LuaRuntime(
                 }
             }
         }
+        const val MAX_PATTERN_LENGTH = 4 * 1024
         const val MAX_PATTERN_SUBJECT = 32 * 1024
         const val MAX_PATTERN_SUBJECT_LAZY = 16 * 1024
 

@@ -30,7 +30,7 @@ Write it in the user's language and keep it updated when you change the script.
 Lua 5.2 (LuaJ). Available: base functions, `table`, `string`, `math`, `bit32`, and `os.time/os.clock/os.date`.
 NOT available: `io`, `require`/`package`, `dofile`/`loadfile`, `debug`, `coroutine`, `os.execute` and the rest of `os`. `load` accepts strings only.
 Each callback is limited to ~5M VM instructions / 10 s of Lua time; `while true do end` is aborted with an error.
-`string.find/match/gmatch/gsub` reject subjects longer than 32KB (16KB if the pattern contains `-` or `*`) with "subject too long"; any string built by `..`, `string.rep`, `string.format`, `table.concat` is capped at 1MB ("string too long"), `string.format` width/precision at 1000; a script is aborted ("memory limit exceeded") if the app heap gets nearly full.
+`string.find/match/gmatch/gsub` reject subjects longer than 32KB (16KB if the pattern contains `-` or `*`) with "subject too long" and patterns longer than 4KB with "pattern too long"; a runaway match stops at the time limit ("time limit exceeded"); any string built by `..`, `string.rep`, `string.format`, `table.concat` is capped at 1MB ("string too long"), `string.format` width/precision at 1000; a script is aborted ("memory limit exceeded") if the app heap gets nearly full.
 Regex matching has a time limit (50 ms per output line, 200 ms for quick replies); a pattern that times out is treated as "no match" and noted once in the log, so avoid nested quantifiers like `(a+)+`.
 Regexes below are **Java regex** syntax (not Lua patterns), matched with "find" (substring) semantics.
 
