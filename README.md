@@ -175,6 +175,8 @@ Mac の場合の手順です。
 - `bash scripts/verify.sh`:デバッグビルドを実行し、ログを `.verify/build.log` に出力
 - `./gradlew :app:testDebugUnitTest`:ユニットテスト(`app/src/test/`)
 
+PR や翻訳は歓迎です。手順は [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。
+
 ## ライセンス
 
 Acrylterm 本体は [Apache License 2.0](LICENSE) です。帰属表示は [NOTICE](NOTICE) を参照してください。

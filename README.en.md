@@ -82,7 +82,7 @@ The app drives herdr's socket API directly over SSH.
    - From the command line: `./gradlew :app:installDebug`
    - Gradle needs Android Studio's bundled JDK (`JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`)
 
-At this point you can already connect through the Tailscale app (VPN) on the device. In that case, turn off "Tailscale 経由" (via Tailscale) in the host settings.
+At this point you can already connect through the Tailscale app (VPN) on the device. In that case, turn off "Connect via Tailscale" in the host settings.
 
 ### Building in Tailscale and Mosh (optional)
 
@@ -176,6 +176,8 @@ See [docs/extensions.md](docs/extensions.md) for details (Japanese) and [app/src
 
 - `bash scripts/verify.sh`: runs a debug build and writes the log to `.verify/build.log`
 - `./gradlew :app:testDebugUnitTest`: unit tests (`app/src/test/`)
+
+Pull requests and translations are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
