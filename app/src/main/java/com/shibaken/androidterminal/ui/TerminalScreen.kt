@@ -562,6 +562,8 @@ fun TerminalScreen(sessionId: String, onBack: () -> Unit, onAppearance: () -> Un
                 onExtCommand = { name -> extRt?.engine?.runCommand(name) },
                 showExtCreate = extensionsEnabled && session.profile.extEnabled && session.profile.extLoadFromHost && extRt != null,
                 onExtCreate = { extGenerateName = ""; extGenerateRequest = ""; extGenerateAgent = ""; showExtGenerate = true },
+                // Fullscreen drops the screen gutters; keep the keys off the display edges.
+                modifier = if (fullscreen) Modifier.padding(horizontal = 8.dp) else Modifier,
             )
             if (!fullscreen) {
                 Row(Modifier.hideWhenIme(imeInsets).fillMaxWidth().clip(RoundedCornerShape(100.dp)).background(CyanVeil.Surface)

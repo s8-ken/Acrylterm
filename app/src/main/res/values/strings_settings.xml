@@ -18,6 +18,7 @@
     <string name="settings_hostlist_open_session">Open session</string>
     <string name="settings_back">Back</string>
     <string name="settings_licenses">Licenses</string>
+    <string name="settings_language">Language</string>
     <string name="settings_tailscale_not_built">This build does not include Tailscale.\nRun tsbridge/build.sh in the repository to create app/libs/tsbridge.aar, then build again.\nUntil then, you can connect through the Tailscale app (VPN) on your device (turn off \"Connect via Tailscale\" in the host settings).</string>
     <string name="settings_tailscale_this_device">This device: %1$s</string>
     <string name="settings_tailscale_login_prompt">Sign in to your tailnet in the browser and approve this device.</string>

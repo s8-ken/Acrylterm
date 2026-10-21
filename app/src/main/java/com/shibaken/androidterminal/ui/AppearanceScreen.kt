@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -123,6 +124,24 @@ fun AppearanceScreen(onBack: () -> Unit, onLicenses: () -> Unit) {
                         SectionHeading(stringResource(R.string.settings_appearance_advanced), "")
                         SwitchRow(stringResource(R.string.settings_appearance_ext_title), stringResource(R.string.settings_appearance_ext_sub), appSettings.extensionsEnabled) {
                             app.settings.setExtensionsEnabled(it)
+                        }
+                    }
+                    // Android 13+ has a per-app language page (fed by res/xml/locales_config.xml); older versions follow the system language.
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        val context = LocalContext.current
+                        VeilCard(Modifier.fillMaxWidth().clickable {
+                            context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_LOCALE_SETTINGS,
+                                android.net.Uri.fromParts("package", context.packageName, null)))
+                        }) {
+                            Row(Modifier.fillMaxWidth().heightIn(min = 32.dp), horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Text(stringResource(R.string.settings_language), fontWeight = FontWeight.Medium)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val locale = LocalConfiguration.current.locales[0]
+                                    Text(locale.getDisplayLanguage(locale), color = CyanVeil.Muted)
+                                    Text("  ›", fontSize = 20.sp, color = CyanVeil.Muted)
+                                }
+                            }
                         }
                     }
                     VeilCard(Modifier.fillMaxWidth().clickable(onClick = onLicenses)) {

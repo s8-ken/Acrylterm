@@ -58,10 +58,11 @@ fun ExtraKeysBar(
     onExtCommand: (String) -> Unit = {},
     showExtCreate: Boolean = false,
     onExtCreate: () -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
     val extraKeysDesc = stringResource(R.string.term_extra_keys)
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp)
             .semantics { contentDescription = extraKeysDesc },
@@ -75,7 +76,7 @@ fun ExtraKeysBar(
         ModifierKey("ALT", active = altOn, held = altHeld, modifier = Modifier.weight(1f), onTap = onAlt)
         FlickKey(view, Modifier.weight(1f))
     }
-    MiniKeysRow(view, showPrefixKey, extKeys, onExtKey, extCommands, onExtCommand, showExtCreate, onExtCreate)
+    MiniKeysRow(view, showPrefixKey, extKeys, onExtKey, extCommands, onExtCommand, showExtCreate, onExtCreate, modifier)
 }
 
 /** Second, horizontally scrollable row of smaller keys that don't fit in the main bar. */
@@ -89,10 +90,11 @@ private fun MiniKeysRow(
     onExtCommand: (String) -> Unit,
     showExtCreate: Boolean,
     onExtCreate: () -> Unit,
+    modifier: Modifier,
 ) {
     val moreKeysDesc = stringResource(R.string.term_more_keys)
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
             .padding(bottom = 2.dp)
